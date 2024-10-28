@@ -4,13 +4,13 @@ from datetime import datetime
 
 default_args = {
     'owner': 'yan arcanjo',
-    'start_date': datetime(2024, 1, 1),
+    'start_date': datetime(2024, 1, 1, 6, 0),
 }
 
 with DAG(
     'example_postgres_dag', 
     default_args=default_args, 
-    schedule_interval='@daily',
+    schedule='0 6 * * *',
     catchup=False
 ) as dag:
     run_query = MsSqlOperator(
@@ -18,6 +18,5 @@ with DAG(
         mssql_conn_id='db_engenharia',
         sql="SELECT 1;"
     )
-
 
     run_query
