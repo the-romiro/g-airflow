@@ -1,6 +1,6 @@
 from airflow import DAG
 from airflow.providers.microsoft.mssql.operators.mssql import MsSqlOperator
-import datetime 
+from datetime import datetime 
 
 default_args = {
     'owner': 'yan arcanjo',
