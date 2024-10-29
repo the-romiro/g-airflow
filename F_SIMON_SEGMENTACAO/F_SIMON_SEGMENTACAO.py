@@ -34,10 +34,10 @@ def populate_fSegmentacao_simon(**kwargs):
 
     for _, row in df.iterrows():
         params = {
-            'dataParam': kwargs['execution_date'].strftime('%Y-%m-%d'), 
-            'equipamentoParam': row['equipamento'], 
-            'segmentacaoParam': row['segmentacao'], 
-            'updatedAtParam': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
+            'data': kwargs['execution_date'].strftime('%Y-%m-%d'), 
+            'equipamento': row['equipamento'], 
+            'segmentacao': row['segmentacao'], 
+            'updated_at': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
         }
         hook.get_sqlalchemy_engine().execute(merge_query, params)
 
