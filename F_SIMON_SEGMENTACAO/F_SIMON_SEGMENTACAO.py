@@ -33,15 +33,19 @@ def populate_fSegmentacao_simon(**kwargs):
     merge_query = read_sql_file('sql_files/insert_DBO.FSEGMENTACAO_SIMON.sql')
 
     with hook.get_sqlalchemy_engine().connect() as connection:
-        for _, row in df.iterrows():
-            params = {
-                'data': kwargs['execution_date'].strftime('%Y-%m-%d'), 
-                'equipamento': row['equipamento'], 
-                'segmentacao': row['segmentacao'], 
-                'updated_at': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
-            }
-            
-            result = connection.execute(text(merge_query), params)
+        with connection.begin():
+            for _, row in df.iterrows():
+                params = {
+                    'data': kwargs['execution_date'].strftime('%Y-%m-%d'), 
+                    'equipamento': row['equipamento'], 
+                    'segmentacao': row['segmentacao'], 
+                    'updated_at': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
+                }
+                
+                try:
+                    result = connection.execute(text(merge_query), params)
+                except Exception as e:
+                    print(f"Erro ao executar a query: {e}")
 
 with DAG(
     'F_SIMON_SEGMENTACAO',
