@@ -11,4 +11,5 @@ WHEN MATCHED THEN
         target.updated_at = source.updated_at   
 WHEN NOT MATCHED THEN
     INSERT (data, equipamento, segmentacao, updated_at)
-    VALUES(source.data, source.equipamento, source.segmentacao, source.updated_at);
+    VALUES(source.data, source.equipamento, source.segmentacao, source.updated_at)
+OUTPUT $action, inserted.*;

@@ -32,13 +32,13 @@ def populate_fSegmentacao_simon(**kwargs):
     hook = MsSqlHook(mssql_conn_id='db_engenharia')
     merge_query = read_sql_file('sql_files/insert_DBO.FSEGMENTACAO_SIMON.sql')
     for _, row in df.iterrows():
-        print(row)
         params = {
             'data': kwargs['execution_date'].strftime('%Y-%m-%d'), 
-            'equipamento': row['equipamento'], 
-            'segmentacao': row['segmentacao'], 
+            'equipamento': row['equipamento'].astype(str), 
+            'segmentacao': row['segmentacao'].astype(str), 
             'updated_at': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
         }
+        print(params)
         hook.get_sqlalchemy_engine().execute(text(merge_query), params)
 
 with DAG(
