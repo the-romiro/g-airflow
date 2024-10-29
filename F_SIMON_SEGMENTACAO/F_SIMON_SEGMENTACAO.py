@@ -9,7 +9,7 @@ default_args = {
     'start_date': datetime(2024, 1, 1, 7, 0),
 }
 
-def get_machine_registration_table():
+def get_machine_registration_table(**kwargs):
     hook = MsSqlOperator.get_db_hook('db_engenharia')
 
     query = 'SELECT 1 AS TESTE;'
