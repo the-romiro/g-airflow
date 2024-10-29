@@ -43,7 +43,7 @@ def populate_fSegmentacao_simon(**kwargs):
                 }
                 
                 try:
-                    result = connection.execute(text(merge_query), params)
+                    connection.execute(text(merge_query), params)
                 except Exception as e:
                     print(f"Erro ao executar a query: {e}")
 
