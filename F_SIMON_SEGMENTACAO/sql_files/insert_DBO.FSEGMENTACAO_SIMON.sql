@@ -1,5 +1,5 @@
 MERGE INTO dbo.fSegmentacao_Simon AS TARGET
-USING (
+USING (SELECT
             :data as data , 
             :equipamento equipamento, 
             :segmentacao as segmentacao, 
