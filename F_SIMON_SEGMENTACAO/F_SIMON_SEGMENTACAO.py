@@ -27,7 +27,7 @@ def get_machine_registration_table(**kwargs):
     return df
 
 def populate_fSegmentacao_simon(**kwargs):
-    df = kwargs['ti'].xcom_pull(tasks_ids='get_machine_table')
+    df = kwargs['ti'].xcom_pull(task_id='get_machine_table')
     hook = MsSqlHook(mssql_conn_id='db_engenharia')
     target_table_name = 'dbo.fSegmentacao_Simon'
     merge_query = read_sql_file('sql_files/insert_DBO.FSEGMENTACAO_SIMON.sql')
