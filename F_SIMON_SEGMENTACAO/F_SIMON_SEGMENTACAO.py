@@ -14,7 +14,7 @@ def get_machine_registration_table(**kwargs):
 
     query = 'SELECT 1 AS TESTE;'
 
-    df = pd.read_sql_query(query, hook.get_conn())
+    df = pd.read_sql_query(query, hook.get_sqlalchemy_engine())
 
     print(df)
 
