@@ -51,7 +51,8 @@ with DAG(
     'F_SIMON_SEGMENTACAO',
     default_args=default_args, 
     schedule='0 7 * * *',
-    catchup=True
+    catchup=True,
+    max_active_runs=1
 ) as dag:
     task = PythonOperator(
         task_id='get_machine_table',
