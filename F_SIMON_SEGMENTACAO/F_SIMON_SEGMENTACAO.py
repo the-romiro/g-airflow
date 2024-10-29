@@ -8,7 +8,7 @@ import os
 
 default_args = {
     'owner': 'yan arcanjo',
-    'start_date': datetime(2024, 1, 1, 7, 0),
+    'start_date': datetime(2024, 7, 1, 7, 0),
 }
 
 #reads the sql file and returns the query
@@ -51,7 +51,7 @@ with DAG(
     'F_SIMON_SEGMENTACAO',
     default_args=default_args, 
     schedule='0 7 * * *',
-    catchup=False
+    catchup=True
 ) as dag:
     task = PythonOperator(
         task_id='get_machine_table',
