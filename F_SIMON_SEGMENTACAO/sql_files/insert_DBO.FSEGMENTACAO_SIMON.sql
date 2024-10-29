@@ -1,4 +1,4 @@
-MERGE INTO {target_table_name} AS TARGET
+MERGE INTO dbo.fSegmentacao_Simon AS TARGET
 USING (VALUES(?, ?, ?, ?)) AS SOURCE (data, equipamento, segmentacao, updated_at)
 ON target.equipuipamento = source.equipamento AND target.data = source.data
 WHEN MATCHED THEN
