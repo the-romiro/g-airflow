@@ -34,8 +34,8 @@ def populate_fSegmentacao_simon(**kwargs):
     for _, row in df.iterrows():
         params = {
             'data': kwargs['execution_date'].strftime('%Y-%m-%d'), 
-            'equipamento': row['equipamento'].astype(str), 
-            'segmentacao': row['segmentacao'].astype(str), 
+            'equipamento': row['equipamento'], 
+            'segmentacao': row['segmentacao'], 
             'updated_at': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
         }
         print(params)
