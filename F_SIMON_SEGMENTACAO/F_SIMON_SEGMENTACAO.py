@@ -41,9 +41,7 @@ def populate_fSegmentacao_simon(**kwargs):
                 'updated_at': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
             }
             
-            connection.execute(text(merge_query), params)
-
-        connection.commit()
+            result = connection.execute(text(merge_query), params)
 
 with DAG(
     'F_SIMON_SEGMENTACAO',
