@@ -1,5 +1,10 @@
+DECLARE @data DATETIME = :data , 
+        @equipamento VARCHAR(50) = :equipamento, 
+        @segmentacao VARCHAR(100) =:segmentacao, 
+        @updated_at DATETIME = :updated_at
+
 MERGE INTO dbo.fSegmentacao_Simon AS TARGET
-USING (SELECT :data, :equipamento, :segmentacao, :updated_at) AS SOURCE 
+USING (SELECT @data as data , @equipamento as equipamento, @segmentacao as segmentacao, @updated_at  as updated_at) AS SOURCE 
 ON target.equipuipamento = source.equipamento AND target.data = source.data
 WHEN MATCHED THEN
     UPDATE SET 
