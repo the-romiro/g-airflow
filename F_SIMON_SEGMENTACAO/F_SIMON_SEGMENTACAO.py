@@ -33,7 +33,7 @@ def populate_fSegmentacao_simon(**kwargs):
     merge_query = read_sql_file('sql_files/insert_DBO.FSEGMENTACAO_SIMON.sql')
 
     for _, row in df.iterrows():
-        params = (kwargs['execution_date'].strftime('%Y-%m-%d'), row['equipamento'], row['segmentacao'], kwargs['execution_date'])
+        params = (kwargs['execution_date'].strftime('%Y-%m-%d'), row['equipamento'], row['segmentacao'], kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S'))
         hook.get_sqlalchemy_engine().execute(merge_query, params)
 
 with DAG(
