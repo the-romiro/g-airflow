@@ -1,9 +1,9 @@
 MERGE INTO dbo.fSegmentacao_Simon AS TARGET
 USING (SELECT
-            ? as data , 
-            ? equipamento, 
-            ? as segmentacao, 
-            ? as updated_at) AS SOURCE 
+            :data as data , 
+            :equipamento equipamento, 
+            :segmentacao as segmentacao, 
+            :updated_at as updated_at) AS SOURCE 
 ON target.equipamento = source.equipamento AND target.data = source.data
 WHEN MATCHED THEN
     UPDATE SET 
