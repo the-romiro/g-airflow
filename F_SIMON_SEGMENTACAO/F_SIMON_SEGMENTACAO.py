@@ -38,7 +38,7 @@ def populate_fSegmentacao_simon(**kwargs):
             'segmentacao': row['segmentacao'], 
             'updated_at': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
         }
-        print(params)
+        print(text(merge_query))
         hook.get_sqlalchemy_engine().execute(text(merge_query), params)
 
 with DAG(
