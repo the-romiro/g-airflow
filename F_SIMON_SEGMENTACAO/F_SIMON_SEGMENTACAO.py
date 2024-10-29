@@ -1,14 +1,14 @@
 from airflow import DAG
 from airflow.providers.microsoft.mssql.hooks.mssql     import MsSqlHook
 from airflow.operators.python                          import PythonOperator
-from datetime import datetime 
+from datetime import datetime , now
 import pandas as pd
 from sqlalchemy import text
 import os
 
 default_args = {
     'owner': 'yan arcanjo',
-    'start_date': datetime(2024, 7, 1, 7, 0),
+    'start_date': datetime(2024, 6, 31, 7, 0),
 }
 
 #reads the sql file and returns the query
@@ -39,7 +39,7 @@ def populate_fSegmentacao_simon(**kwargs):
                     'data': kwargs['execution_date'].strftime('%Y-%m-%d'), 
                     'equipamento': row['equipamento'], 
                     'segmentacao': row['segmentacao'], 
-                    'updated_at': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
+                    'updated_at': now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
                 try:
