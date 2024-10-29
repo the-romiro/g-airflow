@@ -8,7 +8,7 @@ import os
 
 default_args = {
     'owner': 'yan arcanjo',
-    'start_date': datetime(2024, 6, 31, 7, 0),
+    'start_date': datetime(2024, 6, 31, 7, 0, 0)
 }
 
 #reads the sql file and returns the query
