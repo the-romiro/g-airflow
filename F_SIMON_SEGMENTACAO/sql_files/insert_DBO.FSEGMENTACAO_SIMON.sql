@@ -1,7 +1,7 @@
-DECLARE @data DATE = ?, 
-        @equipamento VARCHAR(50) = ?, 
-        @segmentacao VARCHAR(100) = ?, 
-        @updated_at DATETIME = ?
+DECLARE @data DATE = @dataParam, 
+        @equipamento VARCHAR(50) = @equipamentoParam, 
+        @segmentacao VARCHAR(100) = @segmentacaoParam, 
+        @updated_at DATETIME = @updatedAtParam
 
 MERGE INTO dbo.fSegmentacao_Simon AS TARGET
 USING (SELECT @data as data , @equipamento as equipamento, @segmentacao as segmentacao, @updated_at  as updated_at) AS SOURCE 
