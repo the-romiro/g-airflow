@@ -1,4 +1,4 @@
-MERGE INTO fSegmentacao_Simon AS TARGET
+MERGE INTO [dbengenharia].[dbo].[fSegmentacao_Simon] AS TARGET
 USING (SELECT
             :data as data , 
             :equipamento equipamento, 
