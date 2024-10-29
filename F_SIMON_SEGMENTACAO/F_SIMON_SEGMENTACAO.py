@@ -25,7 +25,7 @@ with DAG(
     catchup=False
 ) as dag:
     task = PythonOperator(
-        'test_run',
+        task_id='test_run',
         python_callable=get_machine_registration_table
     )
 
