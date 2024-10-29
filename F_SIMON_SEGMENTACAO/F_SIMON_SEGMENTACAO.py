@@ -3,6 +3,7 @@ from airflow.providers.microsoft.mssql.hooks.mssql     import MsSqlHook
 from airflow.operators.python                          import PythonOperator
 from datetime import datetime 
 import pandas as pd
+from sqlalchemy import text
 import os
 
 default_args = {
@@ -38,7 +39,7 @@ def populate_fSegmentacao_simon(**kwargs):
             'segmentacao': row['segmentacao'], 
             'updated_at': kwargs['execution_date'].strftime('%Y-%m-%d %H:%M:%S')
         }
-        hook.get_sqlalchemy_engine().execute(merge_query, params)
+        hook.get_sqlalchemy_engine().execute(text(merge_query), params)
 
 with DAG(
     'F_SIMON_SEGMENTACAO',
