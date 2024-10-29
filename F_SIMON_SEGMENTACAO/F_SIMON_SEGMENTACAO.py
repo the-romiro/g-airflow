@@ -1,5 +1,5 @@
 from airflow import DAG
-from airflow.providers.microsoft.mssql.operators.mssql import MsSqlOperator
+from airflow.providers.microsoft.mssql.hooks.mssql     import MsSqlHook
 from airflow.operators.python                          import PythonOperator
 from datetime import datetime 
 import pandas as pd
@@ -10,7 +10,7 @@ default_args = {
 }
 
 def get_machine_registration_table(**kwargs):
-    hook = MsSqlOperator.get_db_hook('db_engenharia')
+    hook = MsSqlHook(mssql_conn_id='db_engenharia')
 
     query = 'SELECT 1 AS TESTE;'
 
