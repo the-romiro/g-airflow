@@ -51,6 +51,6 @@ with DAG(
         python_callable=populate_fSegmentacao_simon
     )
 
-
+    task >> task2
 
 
