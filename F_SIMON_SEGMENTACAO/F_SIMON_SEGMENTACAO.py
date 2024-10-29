@@ -3,18 +3,27 @@ from airflow.providers.microsoft.mssql.hooks.mssql     import MsSqlHook
 from airflow.operators.python                          import PythonOperator
 from datetime import datetime 
 import pandas as pd
+import os
+
 
 default_args = {
     'owner': 'yan arcanjo',
     'start_date': datetime(2024, 1, 1, 7, 0),
 }
 
+def read_sql_file(file_path):
+    dir = os.path.dirname(os.path.abspath(__file__))
+    sql_dir = os.path.join(dir, file_path)
+
+    with open(sql_dir, 'r')  as file:
+        query = file.read()
+    return query
+
 def get_machine_registration_table(**kwargs):
     hook = MsSqlHook(mssql_conn_id='db_engenharia')
 
-    query = 'SELECT 1 AS TESTE;'
 
-    df = pd.read_sql_query(query, hook.get_sqlalchemy_engine())
+    df = pd.read_sql_query(read_sql_file('sql_files/DBO.SIM_EQUIPAMENTOS.SQL'), hook.get_sqlalchemy_engine())
 
     print(df)
 
@@ -25,7 +34,7 @@ with DAG(
     catchup=False
 ) as dag:
     task = PythonOperator(
-        task_id='test_run',
+        task_id='get_machine_table',
         python_callable=get_machine_registration_table
     )
 
