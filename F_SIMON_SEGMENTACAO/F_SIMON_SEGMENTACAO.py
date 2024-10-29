@@ -31,8 +31,8 @@ def populate_fSegmentacao_simon(**kwargs):
     df = kwargs['ti'].xcom_pull(task_ids='get_machine_table')
     hook = MsSqlHook(mssql_conn_id='db_engenharia')
     merge_query = read_sql_file('sql_files/insert_DBO.FSEGMENTACAO_SIMON.sql')
-
     for _, row in df.iterrows():
+        print(row)
         params = {
             'data': kwargs['execution_date'].strftime('%Y-%m-%d'), 
             'equipamento': row['equipamento'], 
