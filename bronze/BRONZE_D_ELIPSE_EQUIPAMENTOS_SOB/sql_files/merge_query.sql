@@ -33,7 +33,8 @@ WHEN NOT MATCHED BY TARGET THEN
     	)
 WHEN NOT MATCHED BY SOURCE THEN
     UPDATE SET 
-		ativo = false;
+		ativo = false,
+    data_atualizacao_db = now() - INTERVAL '3 hours';
 
 
 DROP TABLE elipse.cadastros.temp_maquinas;

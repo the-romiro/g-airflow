@@ -10,10 +10,12 @@ from sqlalchemy import create_engine
 
 
 # Nome da conexão definida no Airflow Connections
-connection_id = "elipse_sob"
+connection_id_sob = "elipse_sob"
+connection_id_for = "elipse_for"
+connection_id_cra = "elipse_cra"
 
 # Obtendo a conexão
-conn = BaseHook.get_connection(connection_id)
+conn = BaseHook.get_connection(connection_id_sob)
 
 #reads the sql file and returns the query
 def read_sql_file(file_path):
@@ -31,9 +33,25 @@ default_args = {
 }
 
 def extract_data():
+    conn = BaseHook.get_connection(connection_id_sob)
     url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
     hook = create_engine(url)
-    df = pd.read_sql_query(read_sql_file('extract_paradas.sql'), hook)
+    params = (20,) # id_estabelecimento
+    df_sob = pd.read_sql_query(read_sql_file('extract_paradas.sql'), hook, params=params)
+
+    conn = BaseHook.get_connection(connection_id_cra)
+    url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
+    hook = create_engine(url)
+    params = (40,) # id_estabelecimento
+    df_cra = pd.read_sql_query(read_sql_file('extract_paradas.sql'), hook, params=params)
+
+    conn = BaseHook.get_connection(connection_id_for)
+    url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
+    hook = create_engine(url)
+    params = (21,) # id_estabelecimento
+    df_for = pd.read_sql_query(read_sql_file('extract_paradas.sql'), hook, params=params)
+
+    df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
 
     df['ID_Grupo'] = df['ID_Grupo'].astype('Int64')
 
@@ -58,4 +76,4 @@ with DAG(
         sql="./sql_files/merge_query.sql"
     )
 
-    task >> task2
+task >> task2

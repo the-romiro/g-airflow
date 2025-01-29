@@ -1,5 +1,5 @@
 SELECT
-    20 AS id_estabelecimento,
+    ? AS id_estabelecimento,
     Id,
     Maquina_ID,
     Codigo,
@@ -17,6 +17,6 @@ SELECT
     Ferramental
 FROM [Elipse].[dbo].[Paradas] WITH(NOLOCK)
 WHERE 
-    (Hora_Inicio >= DATEADD(DAY, -10, CONVERT(DATE, GETDATE())))
-    OR 
-    (E3TimeStamp >= DATEADD(DAY, -10, CONVERT(DATE, GETDATE())))
+(Hora_Inicio >= DATEADD(DAY, -10, CONVERT(DATE, GETDATE())))
+OR 
+(E3TimeStamp >= DATEADD(DAY, -10, CONVERT(DATE, GETDATE())))
