@@ -1,0 +1,1 @@
+truncate table elipse.stage.stage_apoio;
