@@ -117,4 +117,4 @@ class SqlServerOperator(BaseOperator):
         conn.commit()
         cursor.close()
         conn.close()
-        os.remove(file_path)
+      

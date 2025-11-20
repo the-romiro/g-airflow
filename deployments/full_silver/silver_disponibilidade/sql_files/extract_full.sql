@@ -24,7 +24,8 @@ SELECT
     Ferramental,
     Cracha_Operador,
     Cracha_Preparador,
-    Cracha_Lider
+    Cracha_Lider,
+    Cracha_Apoio
 FROM [Elipse].[dbo].[Paradas] WITH(NOLOCK)
 WHERE 
 Hora_Inicio between @hora_inicio and @hora_fim OR

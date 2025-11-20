@@ -67,7 +67,7 @@ with DAG(
     default_args=default_args, 
     schedule=None,
     catchup=False,
-    tags=["elipse","self_service", "gold"],
+    tags=["elipse","self_service", "disponibilidade", "gold"],
     max_active_runs=1
 ) as dag:
     transform_data = PostgresOperator(

@@ -12,7 +12,10 @@ when matched and (
 	q.numero_produto is distinct from o."NumeroProduto" or
 	q.programa is distinct from o."Programa" or
 	q.documento is distinct from o."Documento" or
-	q.efetivo is distinct from o."Efetivo"
+	q.efetivo is distinct from o."Efetivo" or
+	q.cracha_preparador is distinct from o."Cracha_Preparador" or
+	q.cracha_lider is distinct from o."Cracha_Lider"
+
 )then
 	update set
 		id_estabelecimento = o.id_estabelecimento,
@@ -26,6 +29,8 @@ when matched and (
 		programa = o."Programa",
 		documento = o."Documento",
 		efetivo = o."Efetivo",
+		cracha_preparador = o."Cracha_Preparador",
+	  cracha_lider = o."Cracha_Lider",
 		data_atualizacao_db = now() - INTERVAL '3 hours'
 when not matched by target then
 	insert(
@@ -40,6 +45,8 @@ when not matched by target then
 		programa,
 		documento,
 		efetivo,
+		cracha_preparador,
+		cracha_lider,
 		data_atualizacao_db
 	)
 	values(
@@ -54,6 +61,8 @@ when not matched by target then
 		o."Programa",
 		o."Documento",
 		o."Efetivo",
+		o."Cracha_Preparador",
+		o."Cracha_Lider",
 		now() - INTERVAL '3 hours'
 	)
 when not matched by source and q.data_hora >= CURRENT_DATE - INTERVAL '31 days' then

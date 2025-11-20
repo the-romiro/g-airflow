@@ -1,27 +1,34 @@
 import json
 import os
 from datetime import datetime
+
 import pandas as pd
 import requests
 from airflow import DAG
-from airflow.utils.task_group import TaskGroup
 from airflow.hooks.base import BaseHook
 from airflow.models import Variable
 from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.utils.task_group import TaskGroup
 from sqlalchemy import create_engine
+
+server = "prod"
+DB = "elipsedev" if server == "dev" else "elipse"
+DW_CONN = "postgres_eng_server_dev" if server == "dev" else "postgres_eng_server"
 
 # Obter data e hora atual
 data_hora_atual = (datetime.now()).strftime("%Y%m%d%H%M%S")
 
-#Adicionar o range da carga
-data_inicio = '2025-02-01 05:24:00'
-data_inicio_formatado = datetime.strptime(data_inicio, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d_%H%M%S')
+# Adicionar o range da carga
+data_inicio = "2024-10-01 05:24:00"
+data_inicio_formatado = datetime.strptime(data_inicio, "%Y-%m-%d %H:%M:%S").strftime(
+    "%Y%m%d_%H%M%S"
+)
 
-data_fim = '2025-03-01 06:00:00'
-data_fim_formatado = datetime.strptime(data_fim, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d_%H%M%S')
+data_fim = "2025-01-01 06:00:00"
+data_fim_formatado = datetime.strptime(data_fim, "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d_%H%M%S")
 
 # Nome da conexão definida no Airflow Connections
 connection_id_sob = "elipse_sob"
@@ -51,11 +58,11 @@ def send_teams_message(message: str, webhook_url: str):
 def notify_teams_on_failure(context):
     message = f"""
     Ocurred an error in the following data pipeline:
-    Dag_id:{context['dag'].dag_id}
-    Run_id:{context['dag_run'].run_id}
-    task_id = {context.get('task_instance').task_id}
+    Dag_id:{context["dag"].dag_id}
+    Run_id:{context["dag_run"].run_id}
+    task_id = {context.get("task_instance").task_id}
     Status: Failure
-    Event_date:{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+    Event_date:{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}
     """
     send_teams_message(message, TEAMS_WEBHOOK_URL)
 
@@ -78,10 +85,15 @@ default_args = {
 
 
 def extract_data_sob():
+    print(f"a conexão escolhida é: {DW_CONN}")
     conn = BaseHook.get_connection(connection_id_sob)
     url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
     hook = create_engine(url)
-    params = (data_inicio, data_fim, 20,)  # id_estabelecimento
+    params = (
+        data_inicio,
+        data_fim,
+        20,
+    )  # id_estabelecimento
     df = pd.read_sql_query(read_sql_file("extract_full.sql"), hook, params=params)
     df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
     df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
@@ -95,7 +107,11 @@ def extract_data_for():
     conn = BaseHook.get_connection(connection_id_for)
     url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
     hook = create_engine(url)
-    params = (data_inicio, data_fim, 21,)  # id_estabelecimento
+    params = (
+        data_inicio,
+        data_fim,
+        21,
+    )  # id_estabelecimento
     df = pd.read_sql_query(read_sql_file("extract_full.sql"), hook, params=params)
     df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
     df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
@@ -109,7 +125,11 @@ def extract_data_cra():
     conn = BaseHook.get_connection(connection_id_cra)
     url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
     hook = create_engine(url)
-    params = (data_inicio, data_fim, 40,)  # id_estabelecimento
+    params = (
+        data_inicio,
+        data_fim,
+        40,
+    )  # id_estabelecimento
     df = pd.read_sql_query(read_sql_file("extract_full.sql"), hook, params=params)
     df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
     df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
@@ -127,15 +147,18 @@ def concat_data_and_load_temp(**kwargs):
 
     df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
 
-    df.to_parquet(
-        f"/datalake/bronze/bronze_elipse_paradas/bronze_elipse_paradas{data_hora_atual}_FULL_{data_inicio_formatado}_{data_fim_formatado}.parquet", index=False
+    # df.to_parquet(
+    #     f"/datalake/bronze/bronze_elipse_paradas/bronze_elipse_paradas{data_hora_atual}_FULL_{data_inicio_formatado}_{data_fim_formatado}.parquet",
+    #     index=False,
+    # )
+
+    df.drop(columns=["linha"])
+
+    df = df.sort_values("E3TimeStamp").drop_duplicates(
+        subset=["Id", "id_estabelecimento"], keep="last"
     )
 
-    df.drop(columns=['linha'])
-
-    df = df.sort_values("E3TimeStamp").drop_duplicates(subset=["Id", "id_estabelecimento"], keep="last")
-
-    hook = PostgresHook(postgres_conn_id="postgres_eng_server")
+    hook = PostgresHook(postgres_conn_id=DW_CONN)
     df.to_sql(
         "temp_paradas",
         hook.get_sqlalchemy_engine(),
@@ -152,9 +175,8 @@ with DAG(
     schedule=None,
     catchup=False,
     max_active_runs=1,
-    tags=["elipse","silver", "full"],
+    tags=["elipse", "silver", "full"],
 ) as dag:
-    
     with TaskGroup("extract_all") as extraction:
         extract_sob = PythonOperator(task_id="extract_data_sob", python_callable=extract_data_sob)
         extract_for = PythonOperator(task_id="extract_data_for", python_callable=extract_data_for)
@@ -162,34 +184,27 @@ with DAG(
 
         [extract_sob, extract_for, extract_cra]
 
-
     concat_and_load = PythonOperator(
         task_id="concat_data_and_load_temp", python_callable=concat_data_and_load_temp
     )
     merge_data = PostgresOperator(
         task_id="merge_table_and_drop_temp",
-        postgres_conn_id="postgres_eng_server",
+        postgres_conn_id=DW_CONN,
         sql="./sql_files/merge_full.sql",
-        params={'hora_inicio': data_inicio, 'hora_fim': data_fim},
-        autocommit=True
+        params={"hora_inicio": data_inicio, "hora_fim": data_fim, "DB": DB},
+        autocommit=True,
     )
     vacuum_task = PostgresOperator(
         task_id="vacuum_task",
-        sql="VACUUM elipse.silver.oee_fparadas;",
-        postgres_conn_id="postgres_eng_server",  # Certifique-se de que você tenha a conexão configurada no Airflow
+        sql=f"VACUUM {DB}.silver.oee_fparadas;",
+        postgres_conn_id=DW_CONN,  # Certifique-se de que você tenha a conexão configurada no Airflow
         autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
     )
     analyze_task = PostgresOperator(
         task_id="analyze_task",
-        sql="ANALYZE elipse.silver.oee_fparadas;",
-        postgres_conn_id="postgres_eng_server",
+        sql=f"ANALYZE {DB}.silver.oee_fparadas;",
+        postgres_conn_id=DW_CONN,
         autocommit=True,
-    )  
+    )
 
-(
-    extraction
-    >> concat_and_load
-    >> vacuum_task
-    >> analyze_task
-    >> merge_data
-)
+(extraction >> concat_and_load >> vacuum_task >> analyze_task >> merge_data)

@@ -6,8 +6,33 @@ cte_identificacao_setup_estratificado as (
 	from elipse.silver.oee_fparadas p
 	left join elipse.silver.cadastros_identificador_setup tp
 	on p.codigo = tp.codigo and p.id_estabelecimento = tp.id_estabelecimento
-	where id_grupo > 0
+	where id_grupo > 0 and (p.data_hora_inicio >= CURRENT_DATE - INTERVAL '80 days'
+	or p.data_hora_fim >= CURRENT_DATE - INTERVAL '80 days')
 	group by p.id_grupo
+),
+cte_disponibilidade as (
+	select 
+		id_estabelecimento,
+		id,
+		maquina_id,
+		data_hora_inicio,
+		data_hora_fim,
+		tempo,
+		codigo,
+		status,
+		turno,
+		id_grupo,
+		numero_produto,
+		documento,
+		programa,
+		ferramental,
+		ref_matriz,
+		cracha_apoio,
+		cracha_preparador,
+		cracha_lider
+	from elipse.silver.oee_fparadas
+	where data_hora_inicio >= CURRENT_DATE - INTERVAL '90 days'
+	or data_hora_fim >= CURRENT_DATE - INTERVAL '90 days'
 ),
 cte_paradas as
 (
@@ -57,6 +82,7 @@ select
 						when 149 then 'Troca de Produto'
 						when 184 then 'Setup de Cor - Glitter'
 						when 422 then 'Deslocamento de Equipe'	
+						when 125 then 'Troca de Layout'
 					end
 				when p.id_estabelecimento = 40 then
 					case  p.codigo
@@ -80,8 +106,11 @@ select
 	cf.descricao as fabrica,
 	cs.descricao  as setor,
 	p.ferramental,
-	p.ref_matriz
-from elipse.silver.oee_fparadas p
+	p.ref_matriz,
+	p.cracha_apoio,
+	p.cracha_preparador,
+	p.cracha_lider
+from cte_disponibilidade p
 inner join elipse.silver.cadastros_maquinas maq
 on p.maquina_id  = maq.id and p.id_estabelecimento = maq.id_estabelecimento
 inner join elipse.silver.cadastros_setores cs
@@ -96,9 +125,9 @@ left join elipse.silver.cadastros_familias_agrupadas cfaa
 on cfa.id_familia_agrupada = cfaa.id 
 left join cte_identificacao_setup_estratificado ids
 on ids.id_grupo = p.id_grupo
-where p.data_hora_inicio >= CURRENT_DATE - INTERVAL '60 days'
-or p.data_hora_fim >= CURRENT_DATE - INTERVAL '60 days'
-or p.data_hora_fim is null),
+where p.data_hora_inicio >= CURRENT_DATE - INTERVAL '90 days'
+or p.data_hora_fim >= CURRENT_DATE - INTERVAL '90 days'
+),
 cte_paradas_final as (
 select 
 	id_estabelecimento,
@@ -118,7 +147,7 @@ select
 	turno,
 	peso_oee,
 	case 
-		when id_grupo is null and tipo_setup is not null then left(md5(id_parada::TEXT || id_equipamento::TEXT), 8) else id_grupo::text
+		when id_grupo is null and tipo_setup is not null then left(md5(id_estabelecimento::TEXT || id_parada::TEXT || id_equipamento::TEXT), 8) else id_grupo::text
 	end as id_grupo,
 	tipo_setup,
 	id_equipamento,
@@ -128,7 +157,10 @@ select
 	fabrica,
 	setor,
 	ferramental,
-	ref_matriz
+	ref_matriz,
+	cracha_apoio,
+	cracha_preparador,
+	cracha_lider
 from cte_paradas
 )
 MERGE INTO elipse.gold.oee_fparadas p
@@ -156,7 +188,10 @@ WHEN MATCHED AND (
     p.fabrica IS DISTINCT FROM o.fabrica OR
     p.setor IS DISTINCT FROM o.setor OR
     p.ferramental IS DISTINCT FROM o.ferramental OR
-    p.ref_matriz IS DISTINCT FROM o.ref_matriz
+    p.ref_matriz IS DISTINCT FROM o.ref_matriz OR
+		p.cracha_preparador IS DISTINCT FROM o.cracha_preparador OR
+		p.cracha_lider IS DISTINCT FROM o.cracha_lider OR
+		p.cracha_apoio IS DISTINCT FROM o.cracha_apoio
 )THEN
 	UPDATE SET
         id_estabelecimento = o.id_estabelecimento,
@@ -183,6 +218,9 @@ WHEN MATCHED AND (
 	      setor = o.setor,
 	      ferramental = o.ferramental,
 	      ref_matriz = o.ref_matriz,
+				cracha_apoio = o.cracha_apoio,
+				cracha_preparador = o.cracha_preparador,
+				cracha_lider = o.cracha_lider,
         data_atualizacao_db = now() - INTERVAL '3 hours'
 WHEN NOT MATCHED BY TARGET THEN
     INSERT (
@@ -210,6 +248,9 @@ WHEN NOT MATCHED BY TARGET THEN
 	      setor,
 	      ferramental,
 	      ref_matriz,
+				cracha_apoio,
+				cracha_preparador,
+				cracha_lider,
         data_atualizacao_db
 	    	)
     VALUES (
@@ -237,7 +278,13 @@ WHEN NOT MATCHED BY TARGET THEN
 	      o.setor,
 	      o.ferramental,
 	      o.ref_matriz,
+				o.cracha_apoio,
+				o.cracha_preparador,
+				o.cracha_lider,
 	    	now() - INTERVAL '3 hours'
     	)
-WHEN NOT MATCHED BY SOURCE AND (p.data_hora_inicio >= CURRENT_DATE - INTERVAL '60 days' or p.data_hora_fim >= CURRENT_DATE - INTERVAL '60 days') THEN
+WHEN NOT MATCHED BY SOURCE AND (p.data_hora_inicio >= CURRENT_DATE - INTERVAL '90 days' or p.data_hora_fim >= CURRENT_DATE - INTERVAL '90 days') THEN
     DELETE;
+
+
+

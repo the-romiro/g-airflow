@@ -1,6 +1,5 @@
 import json
 from datetime import datetime
-
 import requests
 from airflow import DAG
 from airflow.hooks.base import BaseHook
@@ -9,9 +8,14 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 
+# Ambiente
+server = 'prod'
+DB = 'elipsedev' if server == 'dev' else 'elipse'
+DW_CONN = 'postgres_eng_server_dev' if server == 'dev' else 'postgres_eng_server'
+
 # Adicionar o range da carga
-data_inicio = "2025-02-01 05:25:00"
-data_fim = "2025-03-26 06:00:00"
+data_inicio = "2024-10-01 05:24:00"
+data_fim = "2025-01-01 06:00:00"
 
 # Nome da conexão definida no Airflow Connections
 connection_id_sob = "elipse_sob"
@@ -65,20 +69,20 @@ with DAG(
 ) as dag:
     transform_data = PostgresOperator(
         task_id="transform_silver_into_gold",
-        postgres_conn_id="postgres_eng_server",
+        postgres_conn_id=DW_CONN,
         sql="./sql_files/transform_query_full.sql",
-        params={"hora_inicio": data_inicio, "hora_fim": data_fim},
+        params={"hora_inicio": data_inicio, "hora_fim": data_fim, 'database': DB},
     )
     vacuum_task = PostgresOperator(
         task_id="vacuum_task",
-        sql="VACUUM elipse.gold.oee_fparadas;",
-        postgres_conn_id="postgres_eng_server",  # Certifique-se de que você tenha a conexão configurada no Airflow
+        sql=f"VACUUM {DB}.gold.oee_fparadas;",
+        postgres_conn_id=DW_CONN,  # Certifique-se de que você tenha a conexão configurada no Airflow
         autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
     )
     analyze_task = PostgresOperator(
         task_id="analyze_task",
-        sql="ANALYZE elipse.gold.oee_fparadas;",
-        postgres_conn_id="postgres_eng_server",
+        sql=f"ANALYZE {DB}.gold.oee_fparadas;",
+        postgres_conn_id=DW_CONN,
         autocommit=True,
     )
 

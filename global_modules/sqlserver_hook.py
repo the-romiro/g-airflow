@@ -54,6 +54,8 @@ class SqlServerHook(BaseHook):
             
             rows = cursor.fetchall()
 
+            print(len(rows))
+
             return rows, columns
             
         except Exception as e:

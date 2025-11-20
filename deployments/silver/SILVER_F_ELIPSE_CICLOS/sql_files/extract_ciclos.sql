@@ -48,8 +48,11 @@ BEGIN
 			      ,[ferramental]
 			      ,[cod_refer_matriz]
 			      ,[ParBat]
-             FROM [Elipse].dbo.' + QUOTENAME(@tableName) + ' WITH(NOLOCK)' + ' WHERE E3TimeStamp >= DATEADD(DAY, -31, CONVERT(DATE, GETDATE()))';
- 
+             FROM [Elipse].dbo.' + QUOTENAME(@tableName) + ' WITH(NOLOCK)'
+                + ' WHERE E3TimeStamp >= ''{dt_inicio}'' AND E3TimeStamp < ''{dt_fim}'''
+             ;
+            -- E3TimeStamp >= DATEADD(DAY, -31, CONVERT(DATE, GETDATE()))
+
     -- Obter a próxima tabela
     FETCH NEXT FROM table_cursor INTO @tableName;
 END
@@ -62,4 +65,5 @@ DEALLOCATE table_cursor;
 SET @sql = @sql
 
 -- Executar a consulta dinâmica
-EXEC sp_executesql @sql;
+-- EXEC sp_executesql @sql;
+SELECT @sql AS [SQL];

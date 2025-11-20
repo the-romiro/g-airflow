@@ -17,6 +17,7 @@ WHEN MATCHED AND (
     p.id_grupo IS DISTINCT FROM o."ID_Grupo" OR
     p.ref_matriz IS DISTINCT FROM o."Ref_Matriz" OR
     p.ferramental IS DISTINCT FROM o."Ferramental" OR
+		p.cracha_apoio IS DISTINCT FROM o."Cracha_Apoio" OR
 		p.cracha_operador IS DISTINCT FROM o."Cracha_Operador" OR
 		p.cracha_preparador IS DISTINCT FROM o."Cracha_Preparador" OR
 		p.cracha_lider IS DISTINCT FROM o."Cracha_Lider" 
@@ -37,6 +38,7 @@ WHEN MATCHED AND (
         id_grupo = o."ID_Grupo",
         ref_matriz = o."Ref_Matriz",
         ferramental = o."Ferramental",
+				cracha_apoio = o."Cracha_Apoio",
 				cracha_operador = o."Cracha_Operador",
 			  cracha_preparador = o."Cracha_Preparador",
 			  cracha_lider = o."Cracha_Lider", 
@@ -59,6 +61,7 @@ WHEN NOT MATCHED BY TARGET THEN
 	    	id_grupo,
 	    	ref_matriz,
 	    	ferramental,
+				cracha_apoio,
 				cracha_operador,
 			  cracha_preparador,
 			  cracha_lider,
@@ -82,11 +85,12 @@ WHEN NOT MATCHED BY TARGET THEN
 	    	o."ID_Grupo",
 	    	o."Ref_Matriz",
 	    	o."Ferramental",
+				o."Cracha_Apoio",
 				o."Cracha_Operador",
 			  o."Cracha_Preparador",
 			  o."Cracha_Lider",
 	    	now() - INTERVAL '3 hours'
     	)
-WHEN NOT MATCHED BY SOURCE AND (p.data_hora_inicio >= CURRENT_DATE - INTERVAL '60 days' or p.data_hora_fim >= CURRENT_DATE - INTERVAL '60 days') THEN
+WHEN NOT MATCHED BY SOURCE AND (p.data_hora_inicio >= CURRENT_DATE - INTERVAL '90 days' or p.data_hora_fim >= CURRENT_DATE - INTERVAL '90 days') THEN
     DELETE;
 

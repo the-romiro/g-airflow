@@ -132,6 +132,7 @@ with DAG(
     schedule="10 9 * * *",
     catchup=False,
     max_active_runs=1,
+    tags=["elipse", "produtos", "silver"]
 ) as dag:
     extract_sob = PythonOperator(task_id="extract_data_sob", python_callable=extract_data_sob)
     extract_for = PythonOperator(task_id="extract_data_for", python_callable=extract_data_for)

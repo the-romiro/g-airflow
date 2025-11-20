@@ -16,7 +16,9 @@ with cte_performance as (
 		q.turno,
 		q.numero_produto,
 		q.programa,
-		q.documento
+		q.documento,
+		q.cracha_preparador,
+		q.cracha_lider
 	from elipse.silver.oee_fperformance q
 	left join elipse.silver.cadastros_motivos cm on q.codigo = cm.codigo and q.id_estabelecimento  = cm.id_estabelecimento 
 	left join elipse.silver.cadastros_maquinas maq on q.maquina_id = maq.id and q.id_estabelecimento = maq.id_estabelecimento 
@@ -46,6 +48,8 @@ when matched then
 		numero_produto = o.numero_produto,
 		programa = o.programa,
 		documento = o.documento,
+		cracha_preparador = o.cracha_preparador,
+		cracha_lider = o.cracha_lider,
 		data_atualizacao_db = now() - INTERVAL '3 hours'
 when not matched by target then
 	insert(
@@ -66,6 +70,8 @@ when not matched by target then
 		numero_produto,
 		programa,
 		documento,
+		cracha_preparador,
+		cracha_lider,
 		data_atualizacao_db
 	)
 	values(
@@ -86,6 +92,8 @@ when not matched by target then
 		o.numero_produto,
 		o.programa,
 		o.documento,
+		o.cracha_preparador,
+		o.cracha_lider,
 		now() - INTERVAL '3 hours'
 	)
 	when not matched by source and q.data_hora >= CURRENT_DATE - INTERVAL '31 days' then

@@ -1,16 +1,17 @@
 import json
 import os
 from datetime import datetime
+
 import pandas as pd
 import requests
 from airflow import DAG
-from airflow.utils.task_group import TaskGroup
 from airflow.hooks.base import BaseHook
 from airflow.models import Variable
 from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.utils.task_group import TaskGroup
 from sqlalchemy import create_engine
 
 # Obter data e hora atual
@@ -44,11 +45,11 @@ def send_teams_message(message: str, webhook_url: str):
 def notify_teams_on_failure(context):
     message = f"""
     Ocurred an error in the following data pipeline:
-    Dag_id:{context['dag'].dag_id}
-    Run_id:{context['dag_run'].run_id}
-    task_id = {context.get('task_instance').task_id}
+    Dag_id:{context["dag"].dag_id}
+    Run_id:{context["dag_run"].run_id}
+    task_id = {context.get("task_instance").task_id}
     Status: Failure
-    Event_date:{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+    Event_date:{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}
     """
     send_teams_message(message, TEAMS_WEBHOOK_URL)
 
@@ -71,6 +72,7 @@ default_args = {
 
 extraction_sql = "extract_qualidade.sql"
 
+
 def extract_data_sob():
     conn = BaseHook.get_connection(connection_id_sob)
     url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
@@ -87,7 +89,7 @@ def extract_data_for():
     hook = create_engine(url)
     params = (21,)  # id_estabelecimento
     df = pd.read_sql_query(read_sql_file(extraction_sql), hook, params=params)
- 
+
     return df
 
 
@@ -109,13 +111,15 @@ def concat_data_and_load_temp(**kwargs):
 
     df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
 
-    df.to_parquet(
-        f"/datalake/bronze/bronze_elipse_qualidade/bronze_elipse_qualidade{data_hora_atual}.parquet", index=False
+    # df.to_parquet(
+    #     f"/datalake/bronze/bronze_elipse_qualidade/bronze_elipse_qualidade{data_hora_atual}.parquet", index=False
+    # )
+
+    df = df.drop(columns=["linha"])
+
+    df = df.sort_values("E3TimeStamp").drop_duplicates(
+        subset=["E3TimeStamp", "Maquina_ID", "id_estabelecimento"], keep="last"
     )
-
-    df = df.drop(columns=['linha'])
-
-    df = df.sort_values("E3TimeStamp").drop_duplicates(subset=["E3TimeStamp","Maquina_ID","id_estabelecimento"], keep="last")
 
     hook = PostgresHook(postgres_conn_id="postgres_eng_server")
     df.to_sql(
@@ -134,15 +138,14 @@ with DAG(
     schedule="20 9,18 * * *",
     catchup=False,
     max_active_runs=1,
+    tags=["elipse", "qualidade", "silver"],
 ) as dag:
-    
     with TaskGroup("extract_all") as extraction:
         extract_sob = PythonOperator(task_id="extract_data_sob", python_callable=extract_data_sob)
         extract_for = PythonOperator(task_id="extract_data_for", python_callable=extract_data_for)
         extract_cra = PythonOperator(task_id="extract_data_cra", python_callable=extract_data_cra)
 
         [extract_sob, extract_for, extract_cra]
-
 
     concat_and_load = PythonOperator(
         task_id="concat_data_and_load_temp", python_callable=concat_data_and_load_temp
@@ -151,7 +154,7 @@ with DAG(
         task_id="merge_table_and_drop_temp",
         postgres_conn_id="postgres_eng_server",
         sql="./sql_files/merge_query.sql",
-        autocommit=True
+        autocommit=True,
     )
     vacuum_task = PostgresOperator(
         task_id="vacuum_task",
@@ -170,11 +173,4 @@ with DAG(
         trigger_dag_id="GOLD_F_QUALIDADE_SIMON",  # Nome da DAG a ser acionada
     )
 
-(
-    extraction
-    >> concat_and_load
-    >> vacuum_task
-    >> analyze_task
-    >> merge_data
-    >> trigger_dag
-)
+(extraction >> concat_and_load >> vacuum_task >> analyze_task >> merge_data >> trigger_dag)

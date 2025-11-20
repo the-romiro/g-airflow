@@ -1,5 +1,5 @@
-MERGE INTO elipse.silver.oee_fparadas p
-USING elipse.silver.temp_paradas o
+MERGE INTO {{params.DB}}.silver.oee_fparadas p
+USING {{params.DB}}.silver.temp_paradas o
 ON (p.id = o."Id" and p.id_estabelecimento = o.id_estabelecimento)
 WHEN MATCHED AND (
     p.maquina_id IS DISTINCT FROM o."Maquina_ID" or 
@@ -19,7 +19,8 @@ WHEN MATCHED AND (
     p.ferramental IS DISTINCT FROM o."Ferramental" OR
 		p.cracha_operador IS DISTINCT FROM o."Cracha_Operador" OR
 		p.cracha_preparador IS DISTINCT FROM o."Cracha_Preparador" OR
-		p.cracha_lider IS DISTINCT FROM o."Cracha_Lider" 
+		p.cracha_lider IS DISTINCT FROM o."Cracha_Lider"  OR
+		p.cracha_apoio IS DISTINCT FROM o."Cracha_Apoio"
 )THEN
 	UPDATE SET
         maquina_id = o."Maquina_ID",
@@ -40,6 +41,7 @@ WHEN MATCHED AND (
 				cracha_operador = o."Cracha_Operador",
 			  cracha_preparador = o."Cracha_Preparador",
 			  cracha_lider = o."Cracha_Lider", 
+				cracha_apoio = o."Cracha_Apoio",
         data_atualizacao_db = now() - INTERVAL '3 hours'
 WHEN NOT MATCHED BY TARGET THEN
     INSERT (
@@ -62,6 +64,7 @@ WHEN NOT MATCHED BY TARGET THEN
 				cracha_operador,
 			  cracha_preparador,
 			  cracha_lider,
+				cracha_apoio,
 	    	data_atualizacao_db
 	    	)
     VALUES (
@@ -85,6 +88,7 @@ WHEN NOT MATCHED BY TARGET THEN
 				o."Cracha_Operador",
 			  o."Cracha_Preparador",
 			  o."Cracha_Lider",
+				o."Cracha_Apoio",
 	    	now() - INTERVAL '3 hours'
     	)
 WHEN NOT MATCHED BY SOURCE AND (data_hora_inicio between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}' OR
@@ -93,4 +97,4 @@ data_hora_fim between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}' OR
     DELETE;
 
 
-drop table elipse.silver.temp_paradas;
+drop table {{params.DB}}.silver.temp_paradas;

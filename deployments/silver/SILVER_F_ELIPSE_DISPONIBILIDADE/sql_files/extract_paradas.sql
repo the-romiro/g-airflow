@@ -18,9 +18,10 @@ SELECT
     Ferramental,
     Cracha_Operador,
     Cracha_Preparador,
-    Cracha_Lider
+    Cracha_Lider,
+    Cracha_Apoio
 FROM [Elipse].[dbo].[Paradas] WITH(NOLOCK)
 WHERE 
-(Hora_Inicio >= DATEADD(DAY, -60, CONVERT(DATE, GETDATE())))
+(Hora_Inicio >= DATEADD(DAY, -90, CONVERT(DATE, GETDATE())))
 OR 
-(E3TimeStamp >= DATEADD(DAY, -60, CONVERT(DATE, GETDATE())))
+(E3TimeStamp >= DATEADD(DAY, -90, CONVERT(DATE, GETDATE())))

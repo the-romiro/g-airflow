@@ -3,8 +3,8 @@ cte_identificacao_setup_estratificado as (
 	select distinct
 		p.id_grupo,
 		max(tp.tipo_setup) as tipo_setup
-	from elipse.silver.oee_fparadas p
-	left join elipse.silver.cadastros_identificador_setup tp
+	from {{params.database}}.silver.oee_fparadas p
+	left join {{params.database}}.silver.cadastros_identificador_setup tp
 	on p.codigo = tp.codigo and p.id_estabelecimento = tp.id_estabelecimento
 	where id_grupo > 0
 	group by p.id_grupo
@@ -80,25 +80,30 @@ select
 	cf.descricao as fabrica,
 	cs.descricao  as setor,
 	p.ferramental,
-	p.ref_matriz
-from elipse.silver.oee_fparadas p
-inner join elipse.silver.cadastros_maquinas maq
+	p.ref_matriz,
+	cracha_apoio,
+	cracha_preparador,
+	cracha_lider
+from {{params.database}}.silver.oee_fparadas p
+inner join {{params.database}}.silver.cadastros_maquinas maq
 on p.maquina_id  = maq.id and p.id_estabelecimento = maq.id_estabelecimento
-inner join elipse.silver.cadastros_setores cs
+inner join {{params.database}}.silver.cadastros_setores cs
 on cs.id = maq.id_setor and p.id_estabelecimento = cs.id_estabelecimento
-inner join elipse.silver.cadastros_fabricas cf
+inner join {{params.database}}.silver.cadastros_fabricas cf
 on cs.id_fabrica = cf.id and p.id_estabelecimento = cf.id_estabelecimento
-inner join elipse.silver.cadastros_motivos cm
+inner join {{params.database}}.silver.cadastros_motivos cm
 on p.codigo = cm.codigo and p.id_estabelecimento = cm.id_estabelecimento
-inner join elipse.silver.cadastros_familias cfa
+inner join {{params.database}}.silver.cadastros_familias cfa
 on cm.id_familia = cfa.id and cfa.id_estabelecimento = cm.id_estabelecimento
-left join elipse.silver.cadastros_familias_agrupadas cfaa
+left join {{params.database}}.silver.cadastros_familias_agrupadas cfaa
 on cfa.id_familia_agrupada = cfaa.id 
 left join cte_identificacao_setup_estratificado ids
 on ids.id_grupo = p.id_grupo
-where (data_hora_inicio between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}' OR
-data_hora_fim between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}' OR
-(data_hora_fim < '{{ params.hora_inicio }}' and data_hora_fim > '{{ params.hora_fim }}'))),
+where (
+	data_hora_inicio between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}' 
+	or data_hora_fim between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}'
+	or (data_hora_inicio < '{{ params.hora_inicio }}' and data_hora_fim > '{{ params.hora_fim }}')
+)),
 cte_paradas_final as (
 select 
 	id_estabelecimento,
@@ -128,10 +133,13 @@ select
 	fabrica,
 	setor,
 	ferramental,
-	ref_matriz
+	ref_matriz,
+	cracha_apoio,
+	cracha_preparador,
+	cracha_lider
 from cte_paradas
 )
-MERGE INTO elipse.gold.oee_fparadas p
+MERGE INTO {{params.database}}.gold.oee_fparadas p
 USING cte_paradas_final o
 ON (p.id_parada = o.id_parada and p.id_estabelecimento = o.id_estabelecimento)
 WHEN MATCHED AND (
@@ -156,7 +164,10 @@ WHEN MATCHED AND (
     p.fabrica IS DISTINCT FROM o.fabrica OR
     p.setor IS DISTINCT FROM o.setor OR
     p.ferramental IS DISTINCT FROM o.ferramental OR
-    p.ref_matriz IS DISTINCT FROM o.ref_matriz
+    p.ref_matriz IS DISTINCT FROM o.ref_matriz OR
+		p.cracha_apoio IS DISTINCT FROM o.cracha_apoio OR
+	  p.cracha_preparador IS DISTINCT FROM o.cracha_preparador OR
+		p.cracha_lider IS DISTINCT FROM o.cracha_lider
 )THEN
 	UPDATE SET
         id_estabelecimento = o.id_estabelecimento,
@@ -183,6 +194,9 @@ WHEN MATCHED AND (
 	      setor = o.setor,
 	      ferramental = o.ferramental,
 	      ref_matriz = o.ref_matriz,
+				cracha_apoio = o.cracha_apoio,
+				cracha_preparador = o.cracha_preparador,
+				cracha_lider = o.cracha_lider,
         data_atualizacao_db = now() - INTERVAL '3 hours'
 WHEN NOT MATCHED BY TARGET THEN
     INSERT (
@@ -210,6 +224,9 @@ WHEN NOT MATCHED BY TARGET THEN
 	      setor,
 	      ferramental,
 	      ref_matriz,
+				cracha_apoio,
+				cracha_preparador,
+				cracha_lider,
         data_atualizacao_db
 	    	)
     VALUES (
@@ -237,9 +254,15 @@ WHEN NOT MATCHED BY TARGET THEN
 	      o.setor,
 	      o.ferramental,
 	      o.ref_matriz,
+				o.cracha_apoio,
+				o.cracha_preparador,
+				o.cracha_lider,
 	    	now() - INTERVAL '3 hours'
     	)
-WHEN NOT MATCHED BY SOURCE AND (data_hora_inicio between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}' OR
-data_hora_fim between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}' OR
-(data_hora_fim < '{{ params.hora_inicio }}' and data_hora_fim > '{{ params.hora_fim }}')) THEN
+WHEN NOT MATCHED BY SOURCE AND (
+	data_hora_inicio between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}' 
+	or data_hora_fim between '{{ params.hora_inicio }}' and '{{ params.hora_fim }}'
+	or (data_hora_inicio < '{{ params.hora_inicio }}' and data_hora_fim > '{{ params.hora_fim }}')
+) 
+	THEN
     DELETE;

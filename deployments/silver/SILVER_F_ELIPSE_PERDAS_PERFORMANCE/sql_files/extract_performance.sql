@@ -11,7 +11,9 @@ SELECT
   Documento,
   Cracha_Operador,
   NumeroProduto,
-  Efetivo
+  Efetivo,
+  Cracha_Preparador,
+  Cracha_Lider
 FROM [Elipse].[dbo].[Perdas_Performance] WITH(NOLOCK)
 WHERE
 (E3TimeStamp >= DATEADD(DAY, -31, CONVERT(DATE, GETDATE())))

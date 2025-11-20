@@ -4,6 +4,7 @@ when matched and (
 	cp.id_estabelecimento is distinct from o.id_estabelecimento or
 	cp.id is distinct from o."ID" or
 	cp.id_equipamento is distinct from o."ID_Maq" or
+	cp.numero_produto is distinct from o."NumeroProduto" or
 	cp.programa is distinct from o."Programa" or
 	cp.documento is distinct from o."Documento" or
 	cp.data_inicio is distinct from o."DataInicio" or
@@ -16,6 +17,7 @@ when matched and (
 		id_estabelecimento = o.id_estabelecimento,
 		id = o."ID",
 		id_equipamento = o."ID_Maq",
+		numero_produto = o."NumeroProduto",
 		programa = o."Programa",
 		documento = o."Documento",
 		data_inicio = o."DataInicio",
@@ -29,6 +31,7 @@ when not matched by target then
 		id_estabelecimento,
 		id,
 		id_equipamento,
+		numero_produto,
 		programa,
 		documento,
 		data_inicio,
@@ -42,6 +45,7 @@ when not matched by target then
 		o.id_estabelecimento,
 		o."ID",
 		o."ID_Maq",
+		o."NumeroProduto",
 		o."Programa",
 		o."Documento",
 		o."DataInicio",

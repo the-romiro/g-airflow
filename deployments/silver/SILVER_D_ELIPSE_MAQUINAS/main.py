@@ -44,11 +44,11 @@ def send_teams_message(message: str, webhook_url: str):
 def notify_teams_on_failure(context):
     message = f"""
     Ocurred an error in the following data pipeline:
-    Dag_id:{context['dag'].dag_id}
-    Run_id:{context['dag_run'].run_id}
-    task_id = {context.get('task_instance').task_id}
+    Dag_id:{context["dag"].dag_id}
+    Run_id:{context["dag_run"].run_id}
+    task_id = {context.get("task_instance").task_id}
     Status: Failure
-    Event_date:{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+    Event_date:{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}
     """
     send_teams_message(message, TEAMS_WEBHOOK_URL)
 
@@ -111,9 +111,9 @@ def concat_df_and_load_temp(**kwargs):
     df_for = ti.xcom_pull(task_ids="extract_data_for")
 
     df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
-    df.to_parquet(
-        f"/datalake/bronze/bronze_elipse_maquinas/bronze_elipse_maquinas{data_hora_atual}.parquet"
-    )
+    # df.to_parquet(
+    #     f"/datalake/bronze/bronze_elipse_maquinas/bronze_elipse_maquinas{data_hora_atual}.parquet"
+    # )
 
     hook = PostgresHook(postgres_conn_id="postgres_eng_server")
     df.to_sql(
