@@ -13,12 +13,16 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils.task_group import TaskGroup
-from global_modules.functions import getLocalConfig
 from sqlalchemy import create_engine
+
+from global_modules.functions import getLocalConfig
 
 ENVIROMENT = "PROD"
 
 DAG_ID = "silver/SILVER_F_ELIPSE_DISPONIBILIDADE"
+
+# Pegando a pasta onde o script está
+PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 
 # Obter data e hora atual
 data_hora_atual = (datetime.now()).strftime("%Y%m%d%H%M%S")
@@ -93,6 +97,7 @@ default_args = {
 
 def extract_data_sob():
     conn = BaseHook.get_connection(connection_id_sob)
+    file_path = os.path.join(PASTA_ATUAL, "extract_data_sob.parquet")
     url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
     hook = create_engine(url)
     params = (20,)  # id_estabelecimento
@@ -103,11 +108,14 @@ def extract_data_sob():
     df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
     df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
 
-    return df
+    df.to_parquet(file_path)
+
+    return file_path
 
 
 def extract_data_for():
     conn = BaseHook.get_connection(connection_id_for)
+    file_path = os.path.join(PASTA_ATUAL, "extract_data_for.parquet")
     url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
     hook = create_engine(url)
     params = (21,)  # id_estabelecimento
@@ -118,11 +126,14 @@ def extract_data_for():
     df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
     df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
 
-    return df
+    df.to_parquet(file_path)
+
+    return file_path
 
 
 def extract_data_cra():
     conn = BaseHook.get_connection(connection_id_cra)
+    file_path = os.path.join(PASTA_ATUAL, "extract_data_cra.parquet")
     url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
     hook = create_engine(url)
     params = (40,)  # id_estabelecimento
@@ -133,14 +144,21 @@ def extract_data_cra():
     df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
     df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
 
-    return df
+    df.to_parquet(file_path)
+
+    return file_path
 
 
 def concat_dataframes(**kwargs):
     ti = kwargs["ti"]
-    df_sob = ti.xcom_pull(task_ids="extract_all.extract_data_sob")
-    df_cra = ti.xcom_pull(task_ids="extract_all.extract_data_cra")
-    df_for = ti.xcom_pull(task_ids="extract_all.extract_data_for")
+    file_path = os.path.join(PASTA_ATUAL, "concat_dataframes.parquet")
+    file_sob = ti.xcom_pull(task_ids="extract_all.extract_data_sob")
+    file_cra = ti.xcom_pull(task_ids="extract_all.extract_data_cra")
+    file_for = ti.xcom_pull(task_ids="extract_all.extract_data_for")
+
+    df_sob = pd.read_parquet(file_sob)
+    df_for = pd.read_parquet(file_for)
+    df_cra = pd.read_parquet(file_cra)
 
     df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
 
@@ -155,27 +173,28 @@ def concat_dataframes(**kwargs):
         subset=["Id", "id_estabelecimento"], keep="last"
     )
 
-    return df
+    df.to_parquet(file_path)
+
+    return file_path
 
 
 def load_stage(**kwargs):
     ti = kwargs["ti"]
-    df = ti.xcom_pull(task_ids="concat_dataframes")
+    df_path = ti.xcom_pull(task_ids="concat_dataframes")
+
+    df = pd.read_parquet(df_path)
+
     hook = PostgresHook(postgres_conn_id=dw_conn)
-    # Pegando a pasta onde o script está
-    pasta_atual = os.path.dirname(os.path.abspath(__file__))
 
     # Definindo o caminho do arquivo
-    caminho_atual = os.path.join(pasta_atual, "temp_paradas.csv")
-    # temp_csv = "/tmp/temp_paradas.csv"
-    temp_csv = caminho_atual
+    csv_file = os.path.join(PASTA_ATUAL, "temp_paradas.csv")
 
-    df.to_csv(temp_csv, index=False, header=False, sep=";", encoding="utf-8")
+    df.to_csv(csv_file, index=False, header=False, sep=";", encoding="utf-8")
 
     conn = hook.get_conn()
     cursor = conn.cursor()
 
-    with open(temp_csv, "r", encoding="utf-8") as f:
+    with open(csv_file, "r", encoding="utf-8") as f:
         cursor.copy_expert(
             f"COPY {database_id}.stage.stage_paradas FROM STDIN WITH CSV HEADER DELIMITER ';'", f
         )
@@ -183,7 +202,7 @@ def load_stage(**kwargs):
     conn.commit()
     cursor.close()
     conn.close()
-    os.remove(temp_csv)
+    os.remove(csv_file)
 
 
 with DAG(
@@ -199,16 +218,17 @@ with DAG(
         extract_for = PythonOperator(task_id="extract_data_for", python_callable=extract_data_for)
         extract_cra = PythonOperator(task_id="extract_data_cra", python_callable=extract_data_cra)
 
-        [extract_sob, extract_for, extract_cra]
-
     concat = PythonOperator(task_id="concat_dataframes", python_callable=concat_dataframes)
+
     load = PythonOperator(task_id="load_stage", python_callable=load_stage)
+
     truncate_table = PostgresOperator(
         task_id="truncate_table",
         sql=dw_truncate["sql"],
         postgres_conn_id=dw_conn,
         params={"source": dw_truncate["target"], "database_id": database_id},
     )
+
     merge_data = PostgresOperator(
         task_id="merge_stage_silver",
         postgres_conn_id=dw_conn,
@@ -220,18 +240,21 @@ with DAG(
         },
         autocommit=True,
     )
+
     vacuum_task = PostgresOperator(
         task_id="vacuum_task",
         sql=f"VACUUM {database_id}.silver.oee_fparadas;",
         postgres_conn_id=dw_conn,  # Certifique-se de que você tenha a conexão configurada no Airflow
         autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
     )
+
     analyze_task = PostgresOperator(
         task_id="analyze_task",
         sql=f"ANALYZE {database_id}.silver.oee_fparadas;",
         postgres_conn_id=dw_conn,
         autocommit=True,
     )  # Usando TriggerDagRunOperator para acionar a DAG2 após a execução de DAG1
+
     trigger_dag = TriggerDagRunOperator(
         task_id="trigger_gold_dag",
         trigger_dag_id="GOLD_F_DISPONIBILIDADE_SIMON",  # Nome da DAG a ser acionada
