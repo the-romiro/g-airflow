@@ -8,7 +8,7 @@ select GREATEST(COUNT(state), 0), '{{ dag }}' as dag_id, (case when greatest(cou
       )
       AND dag_id= '{{ dag }}'
       AND state='success'
-      AND run_type= 'scheduled'
+      -- AND run_type= 'scheduled'
 union all
 {% else %}
 select GREATEST(COUNT(state), 0), '{{ dag }}' as dag_id, (case when greatest(count(end_date)) = 0 then null else count(end_date) end) as end_date
@@ -18,6 +18,6 @@ select GREATEST(COUNT(state), 0), '{{ dag }}' as dag_id, (case when greatest(cou
       )
       AND dag_id= '{{ dag }}'
       AND state='success'
-      AND run_type= 'scheduled'
+      -- AND run_type= 'scheduled'
 {% endif %}   
 {% endfor %}
