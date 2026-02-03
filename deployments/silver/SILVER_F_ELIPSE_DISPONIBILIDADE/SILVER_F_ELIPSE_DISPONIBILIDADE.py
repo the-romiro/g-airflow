@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 
@@ -96,55 +97,72 @@ default_args = {
 
 
 def extract_data_sob():
-    conn = BaseHook.get_connection(connection_id_sob)
     file_path = os.path.join(PASTA_ATUAL, "extract_data_sob.parquet")
-    url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
-    hook = create_engine(url)
-    params = (20,)  # id_estabelecimento
-    df = pd.read_sql_query(read_sql_file("extract_paradas.sql"), hook, params=params)
-    df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
-    df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
-    df["Cracha_Preparador"] = df["Cracha_Preparador"].astype("Int64")
-    df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
-    df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
 
-    df.to_parquet(file_path)
+    try:
+        conn = BaseHook.get_connection(connection_id_sob)
+        url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
+        hook = create_engine(url)
+        params = (20,)  # id_estabelecimento
+        df = pd.read_sql_query(read_sql_file("extract_paradas.sql"), hook, params=params)
+        df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
+        df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
+        df["Cracha_Preparador"] = df["Cracha_Preparador"].astype("Int64")
+        df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
+        df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
+        df.to_parquet(file_path)
+
+    except Exception as e:
+        logging.error(f"FALHA NA CONEXÃO COM O BANCO DE DADOS: {str(e)}")
+        send_teams_message(f"Erro de conexão com o banco de dados: {str(e)}", TEAMS_WEBHOOK_URL)
 
     return file_path
 
 
 def extract_data_for():
-    conn = BaseHook.get_connection(connection_id_for)
     file_path = os.path.join(PASTA_ATUAL, "extract_data_for.parquet")
-    url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
-    hook = create_engine(url)
-    params = (21,)  # id_estabelecimento
-    df = pd.read_sql_query(read_sql_file("extract_paradas.sql"), hook, params=params)
-    df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
-    df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
-    df["Cracha_Preparador"] = df["Cracha_Preparador"].astype("Int64")
-    df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
-    df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
+    df = pd.DataFrame()
 
-    df.to_parquet(file_path)
+    try:
+        conn = BaseHook.get_connection(connection_id_for)
+        url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
+        hook = create_engine(url)
+        params = (21,)  # id_estabelecimento
+        df = pd.read_sql_query(read_sql_file("extract_paradas.sql"), hook, params=params)
+        df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
+        df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
+        df["Cracha_Preparador"] = df["Cracha_Preparador"].astype("Int64")
+        df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
+        df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
+        df.to_parquet(file_path)
+
+    except Exception as e:
+        logging.error(f"FALHA NA CONEXÃO COM O BANCO DE DADOS: {str(e)}")
+        send_teams_message(f"Erro de conexão com o banco de dados: {str(e)}", TEAMS_WEBHOOK_URL)
 
     return file_path
 
 
 def extract_data_cra():
-    conn = BaseHook.get_connection(connection_id_cra)
     file_path = os.path.join(PASTA_ATUAL, "extract_data_cra.parquet")
-    url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
-    hook = create_engine(url)
-    params = (40,)  # id_estabelecimento
-    df = pd.read_sql_query(read_sql_file("extract_paradas.sql"), hook, params=params)
-    df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
-    df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
-    df["Cracha_Preparador"] = df["Cracha_Preparador"].astype("Int64")
-    df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
-    df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
+    df = pd.DataFrame()
 
-    df.to_parquet(file_path)
+    try:
+        conn = BaseHook.get_connection(connection_id_cra)
+        url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
+        hook = create_engine(url)
+        params = (40,)  # id_estabelecimento
+        df = pd.read_sql_query(read_sql_file("extract_paradas.sql"), hook, params=params)
+        df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
+        df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
+        df["Cracha_Preparador"] = df["Cracha_Preparador"].astype("Int64")
+        df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
+        df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
+        df.to_parquet(file_path)
+
+    except Exception as e:
+        logging.error(f"FALHA NA CONEXÃO COM O BANCO DE DADOS: {str(e)}")
+        send_teams_message(f"Erro de conexão com o banco de dados: {str(e)}", TEAMS_WEBHOOK_URL)
 
     return file_path
 
@@ -196,7 +214,8 @@ def load_stage(**kwargs):
 
     with open(csv_file, "r", encoding="utf-8") as f:
         cursor.copy_expert(
-            f"COPY {database_id}.stage.stage_paradas FROM STDIN WITH CSV HEADER DELIMITER ';'", f
+            f"COPY {database_id}.stage.stage_paradas FROM STDIN WITH CSV HEADER DELIMITER ';'",
+            f,
         )
 
     conn.commit()
