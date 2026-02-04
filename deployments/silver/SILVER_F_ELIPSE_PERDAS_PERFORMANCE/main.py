@@ -107,7 +107,7 @@ def extract_data(cod_estab: int):
         url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
         hook = create_engine(url)
         params = (cod_estab,)  # id_estabelecimento
-        df = pd.read_sql_query(read_sql_file("extract_query.sql"), hook, params=params)
+        df = pd.read_sql_query(read_sql_file(extraction_sql), hook, params=params)
         df.to_parquet(file_path)
 
     except Exception as e:
