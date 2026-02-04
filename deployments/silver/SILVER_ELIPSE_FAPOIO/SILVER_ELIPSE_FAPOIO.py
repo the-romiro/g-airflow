@@ -72,6 +72,7 @@ with DAG(
         postgres_conn_id="postgres_eng_server",
         trigger_rule="all_done",
         # params={'source': dw_truncate['target'], 'database_id': database_id}
+    )
 
     trigger_dag = TriggerDagRunOperator(
         task_id="trigger_gold_dag",
