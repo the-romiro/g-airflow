@@ -1,6 +1,8 @@
 import json
+import logging
 import os
 from datetime import datetime
+from typing import Literal
 
 import pandas as pd
 import requests
@@ -13,6 +15,10 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils.task_group import TaskGroup
 from sqlalchemy import create_engine
+from urllib3 import filepost
+
+# Pegando a pasta onde o script está
+PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 
 # Obter data e hora atual
 data_hora_atual = (datetime.now()).strftime("%Y%m%d%H%M%S")
@@ -21,6 +27,14 @@ data_hora_atual = (datetime.now()).strftime("%Y%m%d%H%M%S")
 connection_id_sob = "elipse_sob"
 connection_id_for = "elipse_for"
 connection_id_cra = "elipse_cra"
+
+type Estabelecimento = Literal["sob", "cra", "for"]
+
+
+def get_parquet_path(estab: Estabelecimento):
+    file_path = os.path.join(PASTA_ATUAL, f"extract_data_{str(estab)}.parquet")
+    return file_path
+
 
 # Conexão com o Teams
 TEAMS_WEBHOOK_URL = Variable.get("WEBHOOK_TEAMS")
@@ -38,7 +52,9 @@ def send_teams_message(message: str, webhook_url: str):
     response = requests.post(webhook_url, headers=headers, data=json.dumps(payload))
 
     if response.status_code != 200:
-        raise ValueError(f"Failed to send message: {response.status_code}, {response.text}")
+        raise ValueError(
+            f"Failed to send message: {response.status_code}, {response.text}"
+        )
 
 
 # Função para enviar a mensagem
@@ -73,41 +89,45 @@ default_args = {
 extraction_sql = "extract_qualidade.sql"
 
 
-def extract_data_sob():
-    conn = BaseHook.get_connection(connection_id_sob)
-    url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
-    hook = create_engine(url)
-    params = (20,)  # id_estabelecimento
-    df = pd.read_sql_query(read_sql_file(extraction_sql), hook, params=params)
+def extract_data(cod_estab: int):
+    match cod_estab:
+        case 20:
+            file_path = get_parquet_path("sob")
+            conn = BaseHook.get_connection(connection_id_sob)
+        case 21:
+            file_path = get_parquet_path("for")
+            conn = BaseHook.get_connection(connection_id_for)
+        case 40:
+            file_path = get_parquet_path("cra")
+            conn = BaseHook.get_connection(connection_id_cra)
+        case _:
+            raise ValueError("Código de estabelecimento inválido")
 
-    return df
+    try:
+        url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
+        hook = create_engine(url)
+        params = (cod_estab,)  # id_estabelecimento
+        df = pd.read_sql_query(read_sql_file(extraction_sql), hook, params=params)
+        df.to_parquet(file_path)
+
+    except Exception as e:
+        logging.error(f"FALHA NA CONEXÃO COM O BANCO DE DADOS: {str(e)}")
+        send_teams_message(
+            f"Erro de conexão com o banco de dados: {str(e)}", TEAMS_WEBHOOK_URL
+        )
+    return file_path
 
 
-def extract_data_for():
-    conn = BaseHook.get_connection(connection_id_for)
-    url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
-    hook = create_engine(url)
-    params = (21,)  # id_estabelecimento
-    df = pd.read_sql_query(read_sql_file(extraction_sql), hook, params=params)
+def concat_data_and_load_temp():
 
-    return df
+    file_path = os.path.join(PASTA_ATUAL, "concat_dataframes.parquet")
+    file_sob = get_parquet_path("sob")
+    file_for = get_parquet_path("for")
+    file_cra = get_parquet_path("cra")
 
-
-def extract_data_cra():
-    conn = BaseHook.get_connection(connection_id_cra)
-    url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
-    hook = create_engine(url)
-    params = (40,)  # id_estabelecimento
-    df = pd.read_sql_query(read_sql_file(extraction_sql), hook, params=params)
-
-    return df
-
-
-def concat_data_and_load_temp(**kwargs):
-    ti = kwargs["ti"]
-    df_sob = ti.xcom_pull(task_ids="extract_all.extract_data_sob")
-    df_cra = ti.xcom_pull(task_ids="extract_all.extract_data_cra")
-    df_for = ti.xcom_pull(task_ids="extract_all.extract_data_for")
+    df_sob = pd.read_parquet(file_sob)
+    df_for = pd.read_parquet(file_for)
+    df_cra = pd.read_parquet(file_cra)
 
     df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
 
@@ -131,6 +151,10 @@ def concat_data_and_load_temp(**kwargs):
         chunksize=5000,
     )
 
+    df.to_parquet(file_path)
+
+    return file_path
+
 
 with DAG(
     "SILVER_F_QUALIDADE_SIMON",
@@ -141,11 +165,15 @@ with DAG(
     tags=["elipse", "qualidade", "silver"],
 ) as dag:
     with TaskGroup("extract_all") as extraction:
-        extract_sob = PythonOperator(task_id="extract_data_sob", python_callable=extract_data_sob)
-        extract_for = PythonOperator(task_id="extract_data_for", python_callable=extract_data_for)
-        extract_cra = PythonOperator(task_id="extract_data_cra", python_callable=extract_data_cra)
-
-        [extract_sob, extract_for, extract_cra]
+        extract_sob = PythonOperator(
+            task_id="extract_data_sob", python_callable=extract_data, op_args=[20]
+        )
+        extract_for = PythonOperator(
+            task_id="extract_data_for", python_callable=extract_data, op_args=[21]
+        )
+        extract_cra = PythonOperator(
+            task_id="extract_data_cra", python_callable=extract_data, op_args=[40]
+        )
 
     concat_and_load = PythonOperator(
         task_id="concat_data_and_load_temp", python_callable=concat_data_and_load_temp
@@ -173,4 +201,11 @@ with DAG(
         trigger_dag_id="GOLD_F_QUALIDADE_SIMON",  # Nome da DAG a ser acionada
     )
 
-(extraction >> concat_and_load >> vacuum_task >> analyze_task >> merge_data >> trigger_dag)
+(
+    extraction
+    >> concat_and_load
+    >> vacuum_task
+    >> analyze_task
+    >> merge_data
+    >> trigger_dag
+)
