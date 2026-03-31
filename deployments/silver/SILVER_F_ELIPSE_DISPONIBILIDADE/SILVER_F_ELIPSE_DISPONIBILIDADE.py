@@ -15,9 +15,10 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils.task_group import TaskGroup
-from global_modules.functions import getLocalConfig
 from sqlalchemy import create_engine
 from urllib3 import filepost
+
+from global_modules.functions import get_local_config
 
 ENVIROMENT = "PROD"
 
@@ -43,9 +44,7 @@ def get_parquet_path(estab: Estabelecimento):
 
 
 database_id = (
-    os.environ.get("DATABASE_DEV")
-    if ENVIROMENT == "DEV"
-    else os.environ.get("DATABASE_PROD")
+    os.environ.get("DATABASE_DEV") if ENVIROMENT == "DEV" else os.environ.get("DATABASE_PROD")
 )
 dw_conn = "postgres_eng_server_dev" if ENVIROMENT == "DEV" else "postgres_eng_server"
 
@@ -53,7 +52,7 @@ dw_conn = "postgres_eng_server_dev" if ENVIROMENT == "DEV" else "postgres_eng_se
 TEAMS_WEBHOOK_URL = Variable.get("WEBHOOK_TEAMS")
 
 # Dependências
-yaml_data = getLocalConfig(DAG_ID)
+yaml_data = get_local_config(DAG_ID)
 
 dw_truncate = yaml_data["dw_commands"]["truncate_table"]
 dw_merge = yaml_data["dw_commands"]["merge_paradas"]
@@ -71,9 +70,7 @@ def send_teams_message(message: str, webhook_url: str):
     response = requests.post(webhook_url, headers=headers, data=json.dumps(payload))
 
     if response.status_code != 200:
-        raise ValueError(
-            f"Failed to send message: {response.status_code}, {response.text}"
-        )
+        raise ValueError(f"Failed to send message: {response.status_code}, {response.text}")
 
 
 # Função para enviar a mensagem
@@ -139,9 +136,7 @@ def extract_data(cod_estab: int):
 
     except Exception as e:
         logging.error(f"FALHA NA CONEXÃO COM O BANCO DE DADOS: {str(e)}")
-        send_teams_message(
-            f"Erro de conexão com o banco de dados: {str(e)}", TEAMS_WEBHOOK_URL
-        )
+        send_teams_message(f"Erro de conexão com o banco de dados: {str(e)}", TEAMS_WEBHOOK_URL)
     return file_path
 
 
@@ -219,9 +214,7 @@ with DAG(
         extract_cra = PythonOperator(
             task_id="extract_data_cra", python_callable=extract_data, op_args=[40]
         )
-    concat = PythonOperator(
-        task_id="concat_dataframes", python_callable=concat_dataframes
-    )
+    concat = PythonOperator(task_id="concat_dataframes", python_callable=concat_dataframes)
 
     load = PythonOperator(task_id="load_stage", python_callable=load_stage)
 

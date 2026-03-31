@@ -1,21 +1,22 @@
 import os
 from datetime import timedelta
+
 import pendulum
 from airflow import DAG
-from global_modules.functions import getGlobalConfig, getLocalConfig
-from global_modules.operators import CustomSqlSensor
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 
+from global_modules.functions import get_global_config, get_local_config
+from global_modules.operators import CustomSqlSensor
 
 DAG_ID = "GOLD_ELIPSE_DMAQUINAS"
 TEMPLATE_SEARCH_PATH = f'{os.environ["SEARCH_PATH"]}/gold/{DAG_ID}/'
 TEMPLATE_SEARCH_PATH_GLOBAL = f'{os.environ["SEARCH_PATH_GLOBAL"]}/'
 
-yaml_dependencies = getGlobalConfig()
+yaml_dependencies = get_global_config()
 dependencies = yaml_dependencies["wait_dependencies"]
 
-#Dependências
-yaml_data = getLocalConfig(f'gold/{DAG_ID}')
+# Dependências
+yaml_data = get_local_config(f"gold/{DAG_ID}")
 dw_merge_maquinas = yaml_data["dw_commands"]["merge_maquinas"]
 
 tz = pendulum.timezone("America/Sao_Paulo")
@@ -36,7 +37,7 @@ with DAG(
     schedule="10 6 * * *",
     default_args=default_args,
     catchup=False,
-    tags=["elipse","self_service", "gold"],
+    tags=["elipse", "self_service", "gold"],
     dagrun_timeout=timedelta(minutes=60),
     template_searchpath=[TEMPLATE_SEARCH_PATH, TEMPLATE_SEARCH_PATH_GLOBAL],
 ) as dag:
@@ -62,12 +63,10 @@ with DAG(
 
     merge_data = PostgresOperator(
         task_id="merge_stage_silver",
-        postgres_conn_id='postgres_eng_server',
-        sql=dw_merge_maquinas['sql'],
-        #params={'source': dw_merge['source'],'target': dw_merge['target'], 'database_id': database_id},
-        autocommit=True
+        postgres_conn_id="postgres_eng_server",
+        sql=dw_merge_maquinas["sql"],
+        # params={'source': dw_merge['source'],'target': dw_merge['target'], 'database_id': database_id},
+        autocommit=True,
     )
 
-
     wait_dag_dependencies >> merge_data
-    

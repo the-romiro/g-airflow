@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 import yaml
 
 
-def getGlobalConfig():
+def get_global_config():
 
     with open("/opt/airflow/dags/global_files/global_config.yml") as stream:
         return yaml.safe_load(stream)
 
 
-def getLocalConfig(dag_name, dag=None):
+def get_local_config(dag_name, dag=None):
     """
     Extract data fusion config file for a specific DAG.
     Args:
@@ -18,7 +18,7 @@ def getLocalConfig(dag_name, dag=None):
         datafusion json DAG config file.
     """
     if dag is not None:
-        if dag.latest_execution_date == None:
+        if dag.latest_execution_date is None:
             conf = dag.get_dagrun(execution_date=datetime.now().replace(tzinfo=timezone.utc))
         else:
             conf = dag.get_dagrun(execution_date=dag.latest_execution_date).conf
