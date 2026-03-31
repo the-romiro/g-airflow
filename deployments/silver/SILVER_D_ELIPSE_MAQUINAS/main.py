@@ -11,7 +11,7 @@ from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from sqlalchemy import create_engine
 
-from global_modules.ms_teams import notify_teams_on_failure
+from global_modules.ms_teams import notify_teams_on_failure, send_teams_message
 
 # Pegando a pasta onde o script está
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
@@ -76,7 +76,7 @@ def extract_data(cod_estab: int):
 
     except Exception as e:
         logging.error(f"FALHA NA CONEXÃO COM O BANCO DE DADOS: {str(e)}")
-        notify_teams_on_failure(f"Erro de conexão com o banco de dados: {str(e)}")
+        send_teams_message(f"Erro de conexão com o banco de dados: {str(e)}")
     return file_path
 
 
