@@ -1,9 +1,9 @@
-import pyodbc
 import logging
 import time
-import os
+
+import pyodbc
 from airflow.hooks.base import BaseHook
-from airflow.utils.context import Context
+
 
 class SqlServerHook(BaseHook):
     template_fields = ("sql",)
@@ -22,18 +22,17 @@ class SqlServerHook(BaseHook):
             f"UID={self.conn.login};"
             f"PWD={self.conn.password}"
         )
-        
-        try: 
+
+        try:
             conn = pyodbc.connect(conn_str)
-            print('---Sucesso ao se conectar ao banco')
+            print("---Sucesso ao se conectar ao banco")
             return conn
-        
+
         except Exception as e:
-            logging.error(f'---Erro ao se conectar ao banco: {e}')
+            logging.error(f"---Erro ao se conectar ao banco: {e}")
             raise
-        
-           
-    def extract(self, sql:str):
+
+    def extract(self, sql: str):
 
         conn = self.get_conn()
 
@@ -42,28 +41,25 @@ class SqlServerHook(BaseHook):
         params = (self._estab,)
 
         try:
-            print(f'---Iniciado consulta: {sql}')
+            print(f"---Iniciado consulta: {sql}")
 
             start_time = time.time()
             cursor.execute(sql, params)
-             
-            
-            print(f'---Consulta finalizada -> Tempo decorrido: {round(time.time() - start_time,2)} segundos')
+
+            print(
+                f"---Consulta finalizada -> Tempo decorrido: {round(time.time() - start_time,2)} segundos"
+            )
 
             columns = [column[0] for column in cursor.description]
-            
+
             rows = cursor.fetchall()
 
             print(len(rows))
 
             return rows, columns
-            
+
         except Exception as e:
             cursor.close()
-            conn.close() 
+            conn.close()
             logging.error(f"Erro ao fazer a consulta: {e}")
             raise
-
-        
-        
-
