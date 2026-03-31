@@ -3,11 +3,16 @@ name = "dags"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "apache-airflow==2.10.2",
-    "apache-airflow-providers-postgres",
-    # "pandas",
-    "pandas>=3.0.0",
-    "psycopg2-binary>=2.9.11",
-    "requests",
-    "sqlalchemy",
+  "apache-airflow==2.10.5",
+  "apache-airflow-providers-postgres>=6.0.0",
+  "pandas>=2.1.4",
+  "psycopg2-binary>=2.9.11",
+  "requests>=2.33.1",
+  "office365-rest-python-client>=2.6.2",
+  "polars>=1.28.1",
+  "pyarrow>=23.0.1",
+  "pyodbc>=5.3.0",
+  "python-dotenv>=1.2.2",
+  "sqlalchemy>=1.4.54",
+  "xlsxwriter>=3.2.9",
 ]
