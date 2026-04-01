@@ -1,28 +1,22 @@
-import json
 import logging
 import os
 from datetime import datetime
 from typing import Literal
 
 import pandas as pd
-import psycopg2
-import requests
 from airflow import DAG
+from airflow.datasets import Dataset
 from airflow.hooks.base import BaseHook
-from airflow.models import Variable
-from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.operators.python import PythonOperator
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils.task_group import TaskGroup
 from sqlalchemy import create_engine
-from urllib3 import filepost
 
 from global_modules.functions import get_local_config
+from global_modules.ms_teams import notify_teams_on_failure, send_teams_message
 
-ENVIROMENT = "PROD"
-
-DAG_ID = "silver/SILVER_F_ELIPSE_DISPONIBILIDADE"
+ENVIRONMENT = "PROD"
 
 # Pegando a pasta onde o script está
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
@@ -44,53 +38,21 @@ def get_parquet_path(estab: Estabelecimento):
 
 
 database_id = (
-    os.environ.get("DATABASE_DEV") if ENVIROMENT == "DEV" else os.environ.get("DATABASE_PROD")
+    os.environ.get("DATABASE_DEV") if ENVIRONMENT == "DEV" else os.environ.get("DATABASE_PROD")
 )
-dw_conn = "postgres_eng_server_dev" if ENVIROMENT == "DEV" else "postgres_eng_server"
-
-# Conexão com o Teams
-TEAMS_WEBHOOK_URL = Variable.get("WEBHOOK_TEAMS")
+dw_conn = "postgres_eng_server_dev" if ENVIRONMENT == "DEV" else "postgres_eng_server"
 
 # Dependências
-yaml_data = get_local_config(DAG_ID)
+yaml_data = get_local_config("silver/SILVER_F_ELIPSE_DISPONIBILIDADE")
 
 dw_truncate = yaml_data["dw_commands"]["truncate_table"]
 dw_merge = yaml_data["dw_commands"]["merge_paradas"]
 
 
-def send_teams_message(message: str, webhook_url: str):
-    """
-    Envia uma mensagem para um canal do Microsoft Teams usando o Webhook.
-
-    :param message: A mensagem a ser enviada.
-    :param webhook_url: A URL do webhook do Microsoft Teams.
-    """
-    headers = {"Content-Type": "application/json"}
-    payload = {"text": message}
-    response = requests.post(webhook_url, headers=headers, data=json.dumps(payload))
-
-    if response.status_code != 200:
-        raise ValueError(f"Failed to send message: {response.status_code}, {response.text}")
-
-
-# Função para enviar a mensagem
-def notify_teams_on_failure(context, database_id):
-    message = f"""
-    Ocurred an error in the following data pipeline:
-    Dag_id:{context["dag"].dag_id}
-    Run_id:{context["dag_run"].run_id}
-    task_id = {context.get("task_instance").task_id}
-    Status: Failure
-    Event_date:{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}
-    Enviroment:{database_id}
-    """
-    send_teams_message(message, TEAMS_WEBHOOK_URL)
-
-
 # reads the sql file and returns the query
 def read_sql_file(file_path: str):
-    dir = os.path.dirname(os.path.abspath(__file__))
-    sql_dir = os.path.join(dir, f"sql_files/{file_path}")
+    _dir = os.path.dirname(os.path.abspath(__file__))
+    sql_dir = os.path.join(_dir, f"sql_files/{file_path}")
 
     with open(sql_dir, "r") as file:
         query = file.read()
@@ -100,9 +62,7 @@ def read_sql_file(file_path: str):
 default_args = {
     "owner": "yan arcanjo",
     "start_date": datetime(2025, 1, 26, 6, 5),
-    "on_failure_callback": lambda context: notify_teams_on_failure(
-        context, database_id=database_id
-    ),
+    "on_failure_callback": notify_teams_on_failure,
 }
 
 extraction_sql = "extract_paradas.sql"
@@ -136,7 +96,7 @@ def extract_data(cod_estab: int):
 
     except Exception as e:
         logging.error(f"FALHA NA CONEXÃO COM O BANCO DE DADOS: {str(e)}")
-        send_teams_message(f"Erro de conexão com o banco de dados: {str(e)}", TEAMS_WEBHOOK_URL)
+        send_teams_message(f"Erro de conexão com o banco de dados: {str(e)}")
     return file_path
 
 
@@ -151,11 +111,6 @@ def concat_dataframes():
     df_cra = pd.read_parquet(file_cra)
 
     df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
-
-    # df.to_parquet(
-    #     f"/datalake/bronze/bronze_elipse_paradas/bronze_elipse_paradas{data_hora_atual}.parquet",
-    #     index=False,
-    # )
 
     df = df.drop(columns=["linha"])
 
@@ -181,6 +136,7 @@ def load_stage(**kwargs):
 
     df.to_csv(csv_file, index=False, header=False, sep=";", encoding="utf-8")
 
+    # TODO: Usar with para instruções abaixo.
     conn = hook.get_conn()
     cursor = conn.cursor()
 
@@ -195,6 +151,8 @@ def load_stage(**kwargs):
     conn.close()
     os.remove(csv_file)
 
+
+gold_dataset = Dataset("elipse://gold/f_disponibilidade_simon")
 
 with DAG(
     "SILVER_F_DISPONIBILIDADE_SIMON",
@@ -214,20 +172,21 @@ with DAG(
         extract_cra = PythonOperator(
             task_id="extract_data_cra", python_callable=extract_data, op_args=[40]
         )
+
     concat = PythonOperator(task_id="concat_dataframes", python_callable=concat_dataframes)
 
     load = PythonOperator(task_id="load_stage", python_callable=load_stage)
 
-    truncate_table = PostgresOperator(
+    truncate_table = SQLExecuteQueryOperator(
         task_id="truncate_table",
         sql=dw_truncate["sql"],
-        postgres_conn_id=dw_conn,
+        conn_id=dw_conn,
         params={"source": dw_truncate["target"], "database_id": database_id},
     )
 
-    merge_data = PostgresOperator(
+    merge_data = SQLExecuteQueryOperator(
         task_id="merge_stage_silver",
-        postgres_conn_id=dw_conn,
+        conn_id=dw_conn,
         sql="./sql_files/merge_query.sql",
         params={
             "source": dw_merge["source"],
@@ -235,34 +194,21 @@ with DAG(
             "database_id": database_id,
         },
         autocommit=True,
+        outlets=[gold_dataset],
     )
 
-    vacuum_task = PostgresOperator(
+    vacuum_task = SQLExecuteQueryOperator(
         task_id="vacuum_task",
         sql=f"VACUUM {database_id}.silver.oee_fparadas;",
-        postgres_conn_id=dw_conn,  # Certifique-se de que você tenha a conexão configurada no Airflow
+        conn_id=dw_conn,
         autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
     )
 
-    analyze_task = PostgresOperator(
+    analyze_task = SQLExecuteQueryOperator(
         task_id="analyze_task",
         sql=f"ANALYZE {database_id}.silver.oee_fparadas;",
-        postgres_conn_id=dw_conn,
+        conn_id=dw_conn,
         autocommit=True,
-    )  # Usando TriggerDagRunOperator para acionar a DAG2 após a execução de DAG1
-
-    trigger_dag = TriggerDagRunOperator(
-        task_id="trigger_gold_dag",
-        trigger_dag_id="GOLD_F_DISPONIBILIDADE_SIMON",  # Nome da DAG a ser acionada
     )
 
-(
-    truncate_table
-    >> extraction
-    >> concat
-    >> load
-    >> vacuum_task
-    >> analyze_task
-    >> merge_data
-    >> trigger_dag
-)
+_ = truncate_table >> extraction >> concat >> load >> vacuum_task >> analyze_task >> merge_data
