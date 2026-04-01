@@ -15,4 +15,8 @@ dependencies = [
   "python-dotenv>=1.2.2",
   "sqlalchemy>=1.4.54",
   "xlsxwriter>=3.2.9",
+  "apache-airflow-providers-microsoft-mssql>=4.3.3",
 ]
+
+[dependency-groups]
+dev = []

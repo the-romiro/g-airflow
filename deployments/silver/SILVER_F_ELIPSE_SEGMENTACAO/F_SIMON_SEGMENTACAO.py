@@ -1,68 +1,57 @@
-from airflow import DAG
-from airflow.providers.microsoft.mssql.hooks.mssql     import MsSqlHook
-from airflow.operators.python                          import PythonOperator
-from datetime import datetime
-import pandas as pd
-from sqlalchemy import text
 import os
+from datetime import datetime
+
+import pandas as pd
+import pendulum
+from airflow import DAG
+from airflow.decorators import task
+from airflow.providers.microsoft.mssql.hooks.mssql import MsSqlHook
+from sqlalchemy import text
 
 default_args = {
-    'owner': 'yan arcanjo',
-    'start_date': datetime(2024, 6, 30, 7, 0)
+    "owner": "yan arcanjo",
+    "start_date": datetime(2024, 6, 30, 7, 0),
 }
 
-#reads the sql file and returns the query
-def read_sql_file(file_path):
-    dir = os.path.dirname(os.path.abspath(__file__))
-    sql_dir = os.path.join(dir, file_path)
 
-    with open(sql_dir, 'r')  as file:
+# reads the sql file and returns the query
+def read_sql_file(file_path):
+    _dir = os.path.dirname(os.path.abspath(__file__))
+    sql_dir = os.path.join(_dir, file_path)
+
+    with open(sql_dir, "r") as file:
         query = file.read()
     return query
 
-#Get the machine tables and returns a dataframe
-def get_machine_registration_table(**kwargs):
-    hook = MsSqlHook(mssql_conn_id='db_engenharia')
-    df = pd.read_sql_query(read_sql_file('sql_files/DBO.SIM_EQUIPAMENTOS.SQL'), hook.get_sqlalchemy_engine())
 
-    return df
+@task
+def populate_f_segmentacao_simon(logical_date: datetime | None = None):
+    engine = MsSqlHook(mssql_conn_id="db_engenharia").get_sqlalchemy_engine()
 
-def populate_fSegmentacao_simon(**kwargs):
-    df = kwargs['ti'].xcom_pull(task_ids='get_machine_table')
-    hook = MsSqlHook(mssql_conn_id='db_engenharia')
-    merge_query = read_sql_file('sql_files/insert_DBO.FSEGMENTACAO_SIMON.sql')
+    df = pd.read_sql_query(
+        read_sql_file("sql_files/DBO.SIM_EQUIPAMENTOS.SQL"),
+        engine,
+    )
 
-    with hook.get_sqlalchemy_engine().connect() as connection:
-        with connection.begin():
-            for _, row in df.iterrows():
-                params = {
-                    'data': kwargs['execution_date'].strftime('%Y-%m-%d'), 
-                    'equipamento': row['equipamento'], 
-                    'segmentacao': row['segmentacao'], 
-                    'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }
-                
-                try:
-                    connection.execute(text(merge_query), params)
-                except Exception as e:
-                    print(f"Erro ao executar a query: {e}")
+    merge_query = read_sql_file("sql_files/insert_DBO.FSEGMENTACAO_SIMON.sql")
+
+    params_list = df.to_dict(orient="records")
+
+    now = pendulum.now("America/Sao_Paulo")
+
+    for row in params_list:
+        row["data"] = logical_date.strftime("%Y-%m-%d")  # pyright: ignore
+        row["updated_at"] = now
+
+    with engine.begin() as conn:
+        conn.execute(text(merge_query), params_list)  # pyright: ignore[reportCallIssue]
+
 
 with DAG(
-    'F_SIMON_SEGMENTACAO',
-    default_args=default_args, 
-    schedule='0 7 * * *',
+    "F_SIMON_SEGMENTACAO",
+    default_args=default_args,
+    schedule="0 7 * * *",
     catchup=False,
-    max_active_runs=1
+    max_active_runs=1,
 ) as dag:
-    task = PythonOperator(
-        task_id='get_machine_table',
-        python_callable=get_machine_registration_table
-    )
-    task2 = PythonOperator(
-        task_id='populate_table_fSegmentacao_simon',
-        python_callable=populate_fSegmentacao_simon
-    )
-
-    task >> task2
-
-
+    populate_f_segmentacao_simon()
