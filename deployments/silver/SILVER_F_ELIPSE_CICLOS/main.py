@@ -1,23 +1,18 @@
-import json
-import math
 import os
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from typing import Literal
 
 import pandas as pd
-import requests
 from airflow import DAG
-from airflow.decorators import task  # , task_group
+from airflow.decorators import task
 from airflow.hooks.base import BaseHook
 from airflow.models import Variable
-from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils.task_group import TaskGroup
 from sqlalchemy import create_engine
-from typing_extensions import Literal
+
+from global_modules.ms_teams import notify_teams_on_failure
 
 # Obter data e hora atual
 data_hora_atual = (datetime.now()).strftime("%Y%m%d%H%M%S")
@@ -29,42 +24,11 @@ NUM_FILIAL = {"elipse_sob": 20, "elipse_for": 21, "elipse_cra": 40}
 
 elipse_conn = Literal["elipse_sob", "elipse_for", "elipse_cra"]
 
-# Conexão com o Teams
-TEAMS_WEBHOOK_URL = Variable.get("WEBHOOK_TEAMS")
-
-
-def send_teams_message(message: str, webhook_url: str):
-    """
-    Envia uma mensagem para um canal do Microsoft Teams usando o Webhook.
-
-    :param message: A mensagem a ser enviada.
-    :param webhook_url: A URL do webhook do Microsoft Teams.
-    """
-    headers = {"Content-Type": "application/json"}
-    payload = {"text": message}
-    response = requests.post(webhook_url, headers=headers, data=json.dumps(payload))
-
-    if response.status_code != 200:
-        raise ValueError(f"Failed to send message: {response.status_code}, {response.text}")
-
-
-# Função para enviar a mensagem
-def notify_teams_on_failure(context):
-    message = f"""
-    Ocurred an error in the following data pipeline:
-    Dag_id:{context["dag"].dag_id}
-    Run_id:{context["dag_run"].run_id}
-    task_id = {context.get("task_instance").task_id}
-    Status: Failure
-    Event_date:{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}
-    """
-    send_teams_message(message, TEAMS_WEBHOOK_URL)
-
 
 # reads the sql file and returns the query
 def read_sql_file(file_path: str):
-    dir = os.path.dirname(os.path.abspath(__file__))
-    sql_dir = os.path.join(dir, f"sql_files/{file_path}")
+    _dir = os.path.dirname(os.path.abspath(__file__))
+    sql_dir = os.path.join(_dir, f"sql_files/{file_path}")
 
     with open(sql_dir, "r") as file:
         query = file.read()
