@@ -19,4 +19,35 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = []
+dev = ["taskipy", "ruff", "pytest", "pytest-cov"]
+
+[tool.taskipy.tasks]
+lint = "uv run ruff check"
+pre_format = "uv run ruff check --fix"
+format = "uv run ruff format"
+run = "uv run streamlit run Home.py"
+pre_test = "uv run task lint"
+test = "uv run pytest -s -x --cov=./ -vv"
+post_test = "uv run coverage html"
+build = "docker build -t ${DOCKER_REGISTRY:-}transferencia-modelo:latest ."
+pre_push = "uv run task build"
+push = "docker push ${DOCKER_REGISTRY:-}transferencia-modelo:latest"
+pre_dw = "uv run task build"
+dw = "docker compose up --watch"
+docker = "docker compose up -d"
+
+[tool.black]
+color = true
+line-length = 100
+target-version = ['py313']
+skip-string-normalization = true
+
+[tool.isort]
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+combine_as_imports = true
+
+[tool.ruff]
+line-length = 100

@@ -25,7 +25,6 @@ def get_columns(sp_list: List):
     view_fields = list(filter(_filter, fields))
 
     for f in view_fields:
-
         field = {
             "select": f.internal_name,
             "internal_name": f.internal_name,
@@ -78,7 +77,10 @@ def parse_datetime(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     return df
 
 
-def parse_number(df: pd.DataFrame, schema: dict[str, sa_types.TypeEngine]) -> pd.DataFrame:
+def parse_number(
+    df: pd.DataFrame,
+    schema: dict[str, sa_types.TypeEngine],
+) -> pd.DataFrame:
     df = df.replace(["nan", "None"], np.nan)
 
     for col, col_type in schema.items():

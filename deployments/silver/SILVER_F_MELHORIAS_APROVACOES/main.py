@@ -97,5 +97,4 @@ with DAG(
     max_active_runs=1,
     tags=["melhorias"],
 ) as dag:
-
     _ = extract_sharepoint() >> store() >> merge_data() >> delete_cache()

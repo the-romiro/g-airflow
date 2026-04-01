@@ -118,7 +118,7 @@ class SqlServerOperator(BaseOperator):
                 writer.writerows(rows[i : i + batch_size])
 
         print(
-            f"---Arquivo {file_name} salvo com sucesso em {file_path}! -> Tempo decorrido: {round(time.time() - start_time,2)} segundos"
+            f"---Arquivo {file_name} salvo com sucesso em {file_path}! -> Tempo decorrido: {round(time.time() - start_time, 2)} segundos"
         )
 
     def copy_table(self, file_path: str = "/datalake/extraction_routine/"):
@@ -139,7 +139,7 @@ class SqlServerOperator(BaseOperator):
             )
 
         print(
-            f"---Arquivo {file_name} copiado com sucesso para a tabela {self.target_table}! -> Tempo decorrido: {round(time.time() - start_time,2)} segundos"
+            f"---Arquivo {file_name} copiado com sucesso para a tabela {self.target_table}! -> Tempo decorrido: {round(time.time() - start_time, 2)} segundos"
         )
 
         conn.commit()

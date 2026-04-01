@@ -47,7 +47,7 @@ class SqlServerHook(BaseHook):
             cursor.execute(sql, params)
 
             print(
-                f"---Consulta finalizada -> Tempo decorrido: {round(time.time() - start_time,2)} segundos"
+                f"---Consulta finalizada -> Tempo decorrido: {round(time.time() - start_time, 2)} segundos"
             )
 
             columns = [column[0] for column in cursor.description]

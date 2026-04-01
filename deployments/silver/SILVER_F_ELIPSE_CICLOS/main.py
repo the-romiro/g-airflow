@@ -126,14 +126,19 @@ def extract_data_cra(parquet_name, sql):
     return True
 
 
-def concat_data_and_load_temp(if_exists: Literal["replace", "append"], parquet_files, **kwargs):
+def concat_data_and_load_temp(
+    if_exists: Literal["replace", "append"],
+    parquet_files,
+    **kwargs,
+):
     # ti = kwargs["ti"]
     # df_sob = ti.xcom_pull(task_ids=f"extract_all_{suffix}.extract_data_sob_{suffix}")
     # df_cra = ti.xcom_pull(task_ids=f"extract_all_{suffix}.extract_data_cra_{suffix}")
     # df_for = ti.xcom_pull(task_ids=f"extract_all_{suffix}.extract_data_for_{suffix}")
 
     df = pd.concat(
-        [pd.read_parquet(os.path.join(PARQUET_FOLDER, p)) for p in parquet_files], ignore_index=True
+        [pd.read_parquet(os.path.join(PARQUET_FOLDER, p)) for p in parquet_files],
+        ignore_index=True,
     )
 
     # df.to_parquet(

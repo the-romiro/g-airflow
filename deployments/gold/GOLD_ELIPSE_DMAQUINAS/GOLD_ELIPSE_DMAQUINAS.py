@@ -9,8 +9,8 @@ from global_modules.functions import get_global_config, get_local_config
 from global_modules.operators import CustomSqlSensor
 
 DAG_ID = "GOLD_ELIPSE_DMAQUINAS"
-TEMPLATE_SEARCH_PATH = f'{os.environ["SEARCH_PATH"]}/gold/{DAG_ID}/'
-TEMPLATE_SEARCH_PATH_GLOBAL = f'{os.environ["SEARCH_PATH_GLOBAL"]}/'
+TEMPLATE_SEARCH_PATH = f"{os.environ['SEARCH_PATH']}/gold/{DAG_ID}/"
+TEMPLATE_SEARCH_PATH_GLOBAL = f"{os.environ['SEARCH_PATH_GLOBAL']}/"
 
 yaml_dependencies = get_global_config()
 dependencies = yaml_dependencies["wait_dependencies"]
@@ -41,7 +41,6 @@ with DAG(
     dagrun_timeout=timedelta(minutes=60),
     template_searchpath=[TEMPLATE_SEARCH_PATH, TEMPLATE_SEARCH_PATH_GLOBAL],
 ) as dag:
-
     wait_dag_dependencies = CustomSqlSensor(
         task_id="wait_dag_dependencies",
         conn_id="airflow_db",
