@@ -22,7 +22,7 @@ class CustomSqlSensor(SqlSensor):
     """
 
     def poke(self, context: Any) -> bool:
-        hook = self.get_db_hook()
+        hook = self._get_hook()
         self.log.info("Poking: %s (with parameters %s)", self.sql, self.parameters)
 
         records = hook.get_records(self.sql, self.parameters)
@@ -40,20 +40,16 @@ class CustomSqlSensor(SqlSensor):
 
         # 🔁 failure callback
         if self.failure:
-            if callable(self.failure):
-                if self.failure(records):
-                    raise AirflowException(
-                        f"Failure criteria met. failure({records}) returned True"
-                    )
-            else:
+            if not callable(self.failure):
                 raise AirflowException(f"failure is present, but not callable -> {self.failure}")
+            if self.failure(records):
+                raise AirflowException(f"Failure criteria met. failure({records}) returned True")
 
         # 🔁 success callback
         if self.success:
-            if callable(self.success):
-                return bool(self.success(records))
-            else:
+            if not callable(self.success):
                 raise AirflowException(f"success is present, but not callable -> {self.success}")
+            return bool(self.success(records))
 
         # 🔁 regra principal
         if not wait_for_completion:

@@ -3,7 +3,7 @@ from datetime import timedelta
 
 import pendulum
 from airflow import DAG
-from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 from global_modules.functions import get_global_config, get_local_config
 from global_modules.operators import CustomSqlSensor
@@ -27,8 +27,8 @@ default_args = {
     "email_on_failure": False,
     "email_on_success": False,
     "depends_on_past": False,
-    "retry_delay": timedelta(minutes=5),
-    "retries": 1,
+    # "retry_delay": timedelta(minutes=1),
+    # "retries": 1,
 }
 
 with DAG(
@@ -61,12 +61,11 @@ with DAG(
         },
     )
 
-    merge_data = PostgresOperator(
+    merge_data = SQLExecuteQueryOperator(
         task_id="merge_stage_silver",
-        postgres_conn_id="postgres_eng_server",
+        conn_id="postgres_eng_server",
         sql=dw_merge_maquinas["sql"],
-        # params={'source': dw_merge['source'],'target': dw_merge['target'], 'database_id': database_id},
         autocommit=True,
     )
 
-    wait_dag_dependencies >> merge_data
+    _ = wait_dag_dependencies >> merge_data

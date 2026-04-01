@@ -3,6 +3,7 @@ from datetime import datetime
 
 import pandas as pd
 from airflow import DAG
+from airflow.datasets import Dataset
 from airflow.hooks.base import BaseHook
 from airflow.operators.python import PythonOperator
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
@@ -132,6 +133,8 @@ def concat_data_and_load_temp(**kwargs):
     )
 
 
+gold_dataset = Dataset("elipse://gold/f_disponibilidade_simon_full")
+
 with DAG(
     "SILVER_F_DISPONIBILIDADE_SIMON_FULL",
     default_args=default_args,
@@ -156,6 +159,7 @@ with DAG(
         sql="./sql_files/merge_full.sql",
         params={"hora_inicio": data_inicio, "hora_fim": data_fim, "DB": DB},
         autocommit=True,
+        outlets=[gold_dataset],
     )
     vacuum_task = SQLExecuteQueryOperator(
         task_id="vacuum_task",
