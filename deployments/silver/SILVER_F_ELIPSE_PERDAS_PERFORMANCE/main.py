@@ -102,7 +102,7 @@ def concat_data_and_load_temp():
     hook = PostgresHook(postgres_conn_id="postgres_eng_server")
     df.to_sql(
         "temp_performance",
-        hook.get_sqlalchemy_engine(),
+        hook.get_sqlalchemy_engine({"executemany_mode": "values"}),
         schema="silver",
         if_exists="replace",
         index=False,

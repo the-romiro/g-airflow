@@ -1,18 +1,17 @@
-import json
 import os
 from datetime import datetime
 
 import pandas as pd
-import requests
 from airflow import DAG
+from airflow.datasets import Dataset
 from airflow.hooks.base import BaseHook
-from airflow.models import Variable
-from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.operators.python import PythonOperator
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils.task_group import TaskGroup
 from sqlalchemy import create_engine
+
+from global_modules.ms_teams import notify_teams_on_failure
 
 # Obter data e hora atual
 data_hora_atual = (datetime.now()).strftime("%Y%m%d%H%M%S")
@@ -31,42 +30,11 @@ connection_id_sob = "elipse_sob"
 connection_id_for = "elipse_for"
 connection_id_cra = "elipse_cra"
 
-# Conexão com o Teams
-TEAMS_WEBHOOK_URL = Variable.get("WEBHOOK_TEAMS")
-
-
-def send_teams_message(message: str, webhook_url: str):
-    """
-    Envia uma mensagem para um canal do Microsoft Teams usando o Webhook.
-
-    :param message: A mensagem a ser enviada.
-    :param webhook_url: A URL do webhook do Microsoft Teams.
-    """
-    headers = {"Content-Type": "application/json"}
-    payload = {"text": message}
-    response = requests.post(webhook_url, headers=headers, data=json.dumps(payload))
-
-    if response.status_code != 200:
-        raise ValueError(f"Failed to send message: {response.status_code}, {response.text}")
-
-
-# Função para enviar a mensagem
-def notify_teams_on_failure(context):
-    message = f"""
-    Ocurred an error in the following data pipeline:
-    Dag_id:{context["dag"].dag_id}
-    Run_id:{context["dag_run"].run_id}
-    task_id = {context.get("task_instance").task_id}
-    Status: Failure
-    Event_date:{datetime.now().strftime("%d/%m/%Y %H:%M:%S")}
-    """
-    send_teams_message(message, TEAMS_WEBHOOK_URL)
-
 
 # reads the sql file and returns the query
 def read_sql_file(file_path: str):
-    dir = os.path.dirname(os.path.abspath(__file__))
-    sql_dir = os.path.join(dir, f"sql_files/{file_path}")
+    _dir = os.path.dirname(os.path.abspath(__file__))
+    sql_dir = os.path.join(_dir, f"sql_files/{file_path}")
 
     with open(sql_dir, "r") as file:
         query = file.read()
@@ -120,10 +88,6 @@ def concat_data_and_load_temp(**kwargs):
 
     df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
 
-    # df.to_parquet(
-    #     f"/datalake/bronze/bronze_elipse_qualidade/bronze_elipse_qualidade{data_hora_atual}_FULL_{data_inicio_formatado}_{data_fim_formatado}.parquet", index=False
-    # )
-
     df = df.drop(columns=["linha"])
 
     df = df.sort_values("E3TimeStamp").drop_duplicates(
@@ -133,13 +97,15 @@ def concat_data_and_load_temp(**kwargs):
     hook = PostgresHook(postgres_conn_id="postgres_eng_server")
     df.to_sql(
         "temp_qualidade",
-        hook.get_sqlalchemy_engine(),
+        hook.get_sqlalchemy_engine({"executemany_mode": "values"}),
         schema="silver",
         if_exists="replace",
         index=False,
         chunksize=5000,
     )
 
+
+gold_dataset = Dataset("elipse://gold/f_qualidade_simon_full")
 
 with DAG(
     "SILVER_F_QUALIDADE_SIMON_FULL",
@@ -153,33 +119,35 @@ with DAG(
         extract_for = PythonOperator(task_id="extract_data_for", python_callable=extract_data_for)
         extract_cra = PythonOperator(task_id="extract_data_cra", python_callable=extract_data_cra)
 
-        [extract_sob, extract_for, extract_cra]
+        _ = [extract_sob, extract_for, extract_cra]
 
     concat_and_load = PythonOperator(
-        task_id="concat_data_and_load_temp", python_callable=concat_data_and_load_temp
+        task_id="concat_data_and_load_temp",
+        python_callable=concat_data_and_load_temp,
     )
-    merge_data = PostgresOperator(
+
+    merge_data = SQLExecuteQueryOperator(
         task_id="merge_table_and_drop_temp",
-        postgres_conn_id="postgres_eng_server",
+        conn_id="postgres_eng_server",
         sql="./sql_files/full_merge_silver_qualidade.sql",
         parameters={"data_inicio": data_inicio, "data_fim": data_fim},
         autocommit=True,
-    )
-    vacuum_task = PostgresOperator(
-        task_id="vacuum_task",
-        sql="VACUUM elipse.silver.oee_fqualidade;",
-        postgres_conn_id="postgres_eng_server",  # Certifique-se de que você tenha a conexão configurada no Airflow
-        autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
-    )
-    analyze_task = PostgresOperator(
-        task_id="analyze_task",
-        sql="ANALYZE elipse.silver.oee_fqualidade;",
-        postgres_conn_id="postgres_eng_server",
-        autocommit=True,
-    )  # Usando TriggerDagRunOperator para acionar a DAG2 após a execução de DAG1
-    trigger_dag = TriggerDagRunOperator(
-        task_id="trigger_gold_dag",
-        trigger_dag_id="GOLD_F_QUALIDADE_SIMON_FULL",  # Nome da DAG a ser acionada
+        outlets=[gold_dataset],
     )
 
-(extraction >> concat_and_load >> vacuum_task >> analyze_task >> merge_data >> trigger_dag)
+    vacuum_task = SQLExecuteQueryOperator(
+        task_id="vacuum_task",
+        sql="VACUUM elipse.silver.oee_fqualidade;",
+        conn_id="postgres_eng_server",
+        autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
+    )
+
+    analyze_task = SQLExecuteQueryOperator(
+        task_id="analyze_task",
+        sql="ANALYZE elipse.silver.oee_fqualidade;",
+        conn_id="postgres_eng_server",
+        autocommit=True,
+    )
+
+
+_ = extraction >> concat_and_load >> vacuum_task >> analyze_task >> merge_data
