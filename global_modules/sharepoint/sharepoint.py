@@ -82,10 +82,9 @@ def fetch_sharepoint_items(
     paged_items = query.top(page_size).get().execute_query()
 
     def to_df(items) -> pd.DataFrame:
-        return (
-            pd.DataFrame(map_to_json(items.to_json()))
-            .astype(str)
-            .drop(columns=["Id"], errors="ignore")
+        return pd.DataFrame(map_to_json(items.to_json()), dtype=str).drop(
+            columns=["Id"],
+            errors="ignore",
         )
 
     all_items = to_df(paged_items)
