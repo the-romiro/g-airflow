@@ -16,6 +16,8 @@ dependencies = [
   "sqlalchemy>=1.4.54",
   "xlsxwriter>=3.2.9",
   "apache-airflow-providers-microsoft-mssql>=4.3.3",
+  "connectorx>=0.4.5",
+  "duckdb>=1.5.1",
 ]
 
 [dependency-groups]

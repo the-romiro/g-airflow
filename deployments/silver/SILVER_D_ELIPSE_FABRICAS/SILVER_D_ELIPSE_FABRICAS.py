@@ -1,13 +1,14 @@
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pandas as pd
+import connectorx as cx
+import duckdb as ddb
 from airflow.decorators import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
-from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.log.logging_mixin import LoggingMixin
 
-from global_modules.database import Estabelecimento, get_elipse_conn, get_estab_code
+from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.utils import get_parquet_file, read_sql_file
 
@@ -18,7 +19,7 @@ default_args = {
     "start_date": datetime(2025, 1, 26, 6, 5),
     "on_failure_callback": notify_teams_on_failure,
     "retries": 2,
-    "retry_delay": timedelta(minutes=5),
+    "retry_delay": timedelta(minutes=2),
     "retry_exponential_backoff": True,
     "max_retry_delay": timedelta(minutes=30),
 }
@@ -52,47 +53,84 @@ def extract_data(estab: Estabelecimento):
 
     log.info(f"[START] Extraindo {estab}")
 
-    with get_elipse_conn(estab) as conn:  # pyright: ignore[reportGeneralTypeIssues]
-        params = (get_estab_code(estab),)
-        sql = read_sql_file(extraction_sql, __file__)
-        df = pd.read_sql_query(sql, conn, params=params)
+    sql = read_sql_file(extraction_sql, __file__)
+    estab_code = get_estab_code(estab)
+
+    sql_with_params = sql.format(estab=estab_code)
+
+    df = cx.read_sql(
+        get_cx_conn(estab),
+        sql_with_params,
+        return_type="arrow",
+    )
+
+    log.info(f"[DONE QUERY] recuperados {df.shape}, {( df.nbytes / (1024**2) ):.2}MB")
 
     # evita arquivo corrompido em retry
     temp_file = parquet_file.with_suffix(".tmp")
-    df.to_parquet(temp_file)
+
+    with ddb.connect() as con:
+        con.register('df', df)
+
+        con.execute(f"COPY (SELECT * FROM df) TO '{temp_file}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+
     temp_file.rename(parquet_file)
 
     log.info(f"[DONE] {estab} -> {len(df)} linhas")
 
 
-@task(retries=2, retry_delay=timedelta(minutes=3))
+@task(retries=2, retry_delay=timedelta(minutes=1))
 def concat_df_and_load_temp():
-    parquet_all = _get_parquet_all()
+    parquet_map = _get_parquet_map()
 
-    if parquet_all.exists():
-        log.info("[SKIP] parquet_all já existe")
+    if not parquet_map:
+        log.warning("[SKIP] Nenhum parquet encontrado em parquet_map")
         return
 
-    log.info("[START] Concatenando dataframes")
+    parquet_paths = [str(p) for p in parquet_map.values()]
+    paths_glob = ", ".join(f"'{p}'" for p in parquet_paths)
+    pg_con_str = get_duckdb_conn("pg")
+    tmp_table = 'silver.temp_fabricas'
 
-    dfs = [pd.read_parquet(p) for p in _get_parquet_map().values()]
-    df = pd.concat(dfs, ignore_index=True)
+    with ddb.connect(
+        config={
+            "threads": (os.cpu_count() or 2) // 2,
+            "preserve_insertion_order": False,
+            "memory_limit": "2GB",
+        }
+    ) as con:
+        # con.execute("INSTALL postgres; LOAD postgres;") # já faz auto loading
+        con.execute(f"ATTACH '{pg_con_str}' AS pg (TYPE POSTGRES);")
 
-    log.info(f"[INFO] Total linhas: {len(df)}")
+        check_table_query = f"SELECT to_regclass('{tmp_table}') IS NOT NULL"
 
-    hook = PostgresHook(postgres_conn_id="postgres_eng_server")
+        tmp_table_exists = con.sql(
+            f"SELECT * FROM postgres_query('pg', $${check_table_query}$$)"
+        ).fetchone()
 
-    df.to_sql(
-        "temp_fabricas",
-        hook.get_sqlalchemy_engine({"executemany_mode": "values"}),
-        schema="silver",
-        if_exists="replace",
-        index=False,
-        chunksize=5000,
-        method="multi",
-    )
+        if tmp_table_exists is not None and tmp_table_exists[0]:
+            log.info(f"[SKIP] '{tmp_table}' já existe")
+            return
 
-    df.to_parquet(parquet_all)
+        log.info("[START] Loading .parquet")
+
+        con.execute(
+            f"CREATE TEMP VIEW v_source AS SELECT * FROM read_parquet([{paths_glob}], union_by_name=true)"
+        )
+
+        # Cria tabela baseada no schema do parquet (sem dados)
+        con.execute(
+            f"""
+            CREATE OR REPLACE TABLE pg.{tmp_table} AS SELECT * FROM v_source LIMIT 0
+        """
+        )
+
+        # Insert em batch
+        result = con.execute(f"INSERT INTO pg.{tmp_table} SELECT * FROM v_source")
+
+        total_rows = result.fetchone()
+
+        log.info(f"[DONE COPY] Total linhas: {total_rows}")
 
     log.info("[DONE] Carga finalizada")
 
@@ -115,6 +153,7 @@ def clear_cache():
     catchup=False,
     max_active_runs=1,
     concurrency=4,
+    tags=["silver", "simon"],
 )
 def dag_factory():
     sob_data = extract_data.override(task_id="extract_data_sob")("sob")
