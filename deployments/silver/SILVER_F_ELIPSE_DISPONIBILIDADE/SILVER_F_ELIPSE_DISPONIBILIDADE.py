@@ -1,214 +1,210 @@
-import logging
 import os
-from datetime import datetime
-from typing import Literal
+from datetime import datetime, timedelta
+from pathlib import Path
 
-import pandas as pd
-from airflow import DAG
+import connectorx as cx
+import duckdb as ddb
 from airflow.datasets import Dataset
-from airflow.hooks.base import BaseHook
-from airflow.operators.python import PythonOperator
+from airflow.decorators import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.utils.task_group import TaskGroup
-from sqlalchemy import create_engine
+from airflow.utils.log.logging_mixin import LoggingMixin
 
-from global_modules.functions import get_local_config
-from global_modules.ms_teams import notify_teams_on_failure, send_teams_message
+from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
+from global_modules.ms_teams import notify_teams_on_failure
+from global_modules.utils import get_parquet_file, read_sql_file
 
-ENVIRONMENT = "PROD"
+log = LoggingMixin().log
 
-# Pegando a pasta onde o script está
-PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
+DATABASE_ID = os.environ.get("DATABASE_PROD")
+DW_CONN = "postgres_eng_server"
 
-# Obter data e hora atual
-data_hora_atual = (datetime.now()).strftime("%Y%m%d%H%M%S")
+STAGE_TABLE = "stage.stage_paradas"
+extraction_sql = "extract_paradas.sql"
 
-# Nome da conexão definida no Airflow Connections
-connection_id_sob = "elipse_sob"
-connection_id_for = "elipse_for"
-connection_id_cra = "elipse_cra"
-
-type Estabelecimento = Literal["sob", "cra", "for"]
-
-
-def get_parquet_path(estab: Estabelecimento):
-    file_path = os.path.join(PASTA_ATUAL, f"extract_data_{str(estab)}.parquet")
-    return file_path
-
-
-database_id = (
-    os.environ.get("DATABASE_DEV") if ENVIRONMENT == "DEV" else os.environ.get("DATABASE_PROD")
-)
-dw_conn = "postgres_eng_server_dev" if ENVIRONMENT == "DEV" else "postgres_eng_server"
-
-# Dependências
-yaml_data = get_local_config("silver/SILVER_F_ELIPSE_DISPONIBILIDADE")
-
-dw_truncate = yaml_data["dw_commands"]["truncate_table"]
-dw_merge = yaml_data["dw_commands"]["merge_paradas"]
-
-
-# reads the sql file and returns the query
-def read_sql_file(file_path: str):
-    _dir = os.path.dirname(os.path.abspath(__file__))
-    sql_dir = os.path.join(_dir, f"sql_files/{file_path}")
-
-    with open(sql_dir, "r") as file:
-        query = file.read()
-    return query
-
+gold_dataset = Dataset("elipse://gold/f_disponibilidade_simon")
 
 default_args = {
     "owner": "yan arcanjo",
     "start_date": datetime(2025, 1, 26, 6, 5),
     "on_failure_callback": notify_teams_on_failure,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=30),
 }
 
-extraction_sql = "extract_paradas.sql"
+
+def _get_parquet_map() -> dict[Estabelecimento, Path]:
+    return {
+        "sob": get_parquet_file("sob", __file__),
+        "for": get_parquet_file("for", __file__),
+        "cra": get_parquet_file("cra", __file__),
+    }
 
 
-def extract_data(cod_estab: int):
-    match cod_estab:
-        case 20:
-            file_path = get_parquet_path("sob")
-            conn = BaseHook.get_connection(connection_id_sob)
-        case 21:
-            file_path = get_parquet_path("for")
-            conn = BaseHook.get_connection(connection_id_for)
-        case 40:
-            file_path = get_parquet_path("cra")
-            conn = BaseHook.get_connection(connection_id_cra)
-        case _:
-            raise ValueError("Código de estabelecimento inválido")
+@task(retries=3, retry_delay=timedelta(minutes=2))
+def extract_data(estab: Estabelecimento):
+    parquet_file = _get_parquet_map()[estab]
 
-    try:
-        url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
-        hook = create_engine(url)
-        params = (cod_estab,)  # id_estabelecimento
-        df = pd.read_sql_query(read_sql_file(extraction_sql), hook, params=params)
-        df["ID_Grupo"] = df["ID_Grupo"].astype("Int64")
-        df["Cracha_Operador"] = df["Cracha_Operador"].astype("Int64")
-        df["Cracha_Preparador"] = df["Cracha_Preparador"].astype("Int64")
-        df["Cracha_Lider"] = df["Cracha_Lider"].astype("Int64")
-        df["Cracha_Apoio"] = df["Cracha_Apoio"].astype("Int64")
-        df.to_parquet(file_path)
+    if parquet_file.exists():
+        log.info(f"[SKIP] {estab} já processado")
+        return
 
-    except Exception as e:
-        logging.error(f"FALHA NA CONEXÃO COM O BANCO DE DADOS: {str(e)}")
-        send_teams_message(f"Erro de conexão com o banco de dados: {str(e)}")
-    return file_path
+    log.info(f"[START] Extraindo {estab}")
 
+    sql = read_sql_file(extraction_sql, __file__)
+    estab_code = get_estab_code(estab)
+    sql_with_params = sql.format(estab=estab_code)
 
-def concat_dataframes():
-    file_path = os.path.join(PASTA_ATUAL, "concat_dataframes.parquet")
-    file_sob = get_parquet_path("sob")
-    file_for = get_parquet_path("for")
-    file_cra = get_parquet_path("cra")
+    df = cx.read_sql(get_cx_conn(estab), sql_with_params, return_type="arrow")
 
-    df_sob = pd.read_parquet(file_sob)
-    df_for = pd.read_parquet(file_for)
-    df_cra = pd.read_parquet(file_cra)
+    log.info(f"[DONE QUERY] recuperados {df.shape}, {(df.nbytes / (1024**2)):.2f}MB")
 
-    df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
+    temp_file = parquet_file.with_suffix(".tmp")
 
-    df = df.drop(columns=["linha"])
+    with ddb.connect() as con:
+        con.register("df", df)
+        con.execute(f"COPY (SELECT * FROM df) TO '{temp_file}' (FORMAT PARQUET, COMPRESSION ZSTD)")
 
-    df = df.sort_values("E3TimeStamp").drop_duplicates(
-        subset=["Id", "id_estabelecimento"], keep="last"
-    )
+    temp_file.rename(parquet_file)
 
-    df.to_parquet(file_path)
+    log.info(f"[DONE] {estab} -> {df.shape[0]} linhas")
 
-    return file_path
+    del df
 
 
-def load_stage(**kwargs):
-    ti = kwargs["ti"]
-    df_path = ti.xcom_pull(task_ids="concat_dataframes")
+@task(retries=2, retry_delay=timedelta(minutes=1))
+def concat_and_load_stage():
+    parquet_map = _get_parquet_map()
+    parquet_paths = list(parquet_map.values())
+    paths_glob = ", ".join(f"'{p}'" for p in parquet_paths)
 
-    df = pd.read_parquet(df_path)
+    pg_conn_str = get_duckdb_conn("pg")
 
-    hook = PostgresHook(postgres_conn_id=dw_conn)
+    with ddb.connect(
+        config={
+            "threads": (os.cpu_count() or 2) // 2,
+            "preserve_insertion_order": False,
+            "memory_limit": "2GB",
+        }
+    ) as con:
+        con.execute(f"ATTACH '{pg_conn_str}' AS pg (TYPE POSTGRES);")
 
-    # Definindo o caminho do arquivo
-    csv_file = os.path.join(PASTA_ATUAL, "temp_paradas.csv")
+        already_loaded = con.sql(
+            f"SELECT COUNT(*) FROM postgres_query('pg', 'SELECT 1 FROM {STAGE_TABLE} LIMIT 1')"
+        ).fetchone()
 
-    df.to_csv(csv_file, index=False, header=False, sep=";", encoding="utf-8")
+        if already_loaded and already_loaded[0] > 0:
+            log.info(f"[SKIP] '{STAGE_TABLE}' já carregada")
+            return
 
-    # TODO: Usar with para instruções abaixo.
-    conn = hook.get_conn()
-    cursor = conn.cursor()
+        size_mb = con.sql(
+            f"SELECT SUM(total_uncompressed_size) / (1024*1024.0) FROM parquet_metadata([{paths_glob}])"
+        ).fetchone() or (0,)
 
-    with open(csv_file, "r", encoding="utf-8") as f:
-        cursor.copy_expert(
-            f"COPY {database_id}.stage.stage_paradas FROM STDIN WITH CSV HEADER DELIMITER ';'",
-            f,
+        log.info(f"[START] Carregando parquets ({size_mb[0]:.2f}MB)")
+
+        con.execute(
+            f"""
+            CREATE TEMP VIEW v_source AS
+            SELECT * FROM read_parquet([{paths_glob}], union_by_name=true)
+            """
         )
 
-    conn.commit()
-    cursor.close()
-    conn.close()
-    os.remove(csv_file)
+        log.info("[CHECK] Removendo duplicadas por 'Id' e 'id_estabelecimento'.")
+
+        # Evitar duplicidade dos dados.
+        con.execute(
+            """
+            CREATE TEMP VIEW v_deduped AS
+            SELECT * EXCLUDE (rn) FROM (
+                SELECT *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY "Id", id_estabelecimento
+                        ORDER BY "E3TimeStamp" DESC
+                    ) AS rn
+                FROM v_source
+            )
+            WHERE rn = 1
+        """
+        )
+
+        log.info("[DUCKDB] Iniciando bulk insert.")
+        total_rows = con.execute(
+            f"INSERT INTO pg.{STAGE_TABLE} SELECT * FROM v_deduped"
+        ).fetchone() or (0,)
+
+        log.info(f"[DONE] Total linhas inseridas: {total_rows[0]}")
 
 
-gold_dataset = Dataset("elipse://gold/f_disponibilidade_simon")
+@task
+def clear_cache():
+    log.info("[CLEANUP] Limpando arquivos")
+    for parquet in _get_parquet_map().values():
+        parquet.unlink(missing_ok=True)
 
-with DAG(
-    "SILVER_F_DISPONIBILIDADE_SIMON",
+
+@dag(
+    dag_id="SILVER_F_DISPONIBILIDADE_SIMON",
     default_args=default_args,
     schedule="30 9,18 * * *",
     catchup=False,
     max_active_runs=1,
-    tags=["elipse", "disponibilidade", "silver"],
-) as dag:
-    with TaskGroup("extract_all") as extraction:
-        extract_sob = PythonOperator(
-            task_id="extract_data_sob", python_callable=extract_data, op_args=[20]
-        )
-        extract_for = PythonOperator(
-            task_id="extract_data_for", python_callable=extract_data, op_args=[21]
-        )
-        extract_cra = PythonOperator(
-            task_id="extract_data_cra", python_callable=extract_data, op_args=[40]
-        )
+    concurrency=4,
+    tags=["elipse", "silver", "disponibilidade"],
+)
+def dag_factory():
+    truncate_stage = SQLExecuteQueryOperator(
+        task_id="truncate_stage",
+        conn_id=DW_CONN,
+        sql="sql_files/truncate_stage_paradas.sql",
+        params={"source": STAGE_TABLE, "database_id": DATABASE_ID},
+    )
 
-    concat = PythonOperator(task_id="concat_dataframes", python_callable=concat_dataframes)
+    sob_data = extract_data.override(task_id="extract_data_sob")("sob")
+    for_data = extract_data.override(task_id="extract_data_for")("for")
+    cra_data = extract_data.override(task_id="extract_data_cra")("cra")
 
-    load = PythonOperator(task_id="load_stage", python_callable=load_stage)
+    concat_load = concat_and_load_stage()
 
-    truncate_table = SQLExecuteQueryOperator(
-        task_id="truncate_table",
-        sql=dw_truncate["sql"],
-        conn_id=dw_conn,
-        params={"source": dw_truncate["target"], "database_id": database_id},
+    vacuum_task = SQLExecuteQueryOperator(
+        task_id="vacuum_task",
+        sql=f"VACUUM {DATABASE_ID}.silver.oee_fparadas;",
+        conn_id=DW_CONN,
+        autocommit=True,
+    )
+
+    analyze_task = SQLExecuteQueryOperator(
+        task_id="analyze_task",
+        sql=f"ANALYZE {DATABASE_ID}.silver.oee_fparadas;",
+        conn_id=DW_CONN,
+        autocommit=True,
     )
 
     merge_data = SQLExecuteQueryOperator(
         task_id="merge_stage_silver",
-        conn_id=dw_conn,
-        sql="./sql_files/merge_query.sql",
+        conn_id=DW_CONN,
+        sql="sql_files/merge_query.sql",
         params={
-            "source": dw_merge["source"],
-            "target": dw_merge["target"],
-            "database_id": database_id,
+            "source": STAGE_TABLE,
+            "target": "silver.oee_fparadas",
+            "database_id": DATABASE_ID,
         },
         autocommit=True,
         outlets=[gold_dataset],
     )
 
-    vacuum_task = SQLExecuteQueryOperator(
-        task_id="vacuum_task",
-        sql=f"VACUUM {database_id}.silver.oee_fparadas;",
-        conn_id=dw_conn,
-        autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
+    clear = clear_cache()
+
+    _ = (
+        truncate_stage
+        >> [sob_data, for_data, cra_data]
+        >> concat_load
+        >> vacuum_task
+        >> analyze_task
+        >> merge_data
+        >> clear
     )
 
-    analyze_task = SQLExecuteQueryOperator(
-        task_id="analyze_task",
-        sql=f"ANALYZE {database_id}.silver.oee_fparadas;",
-        conn_id=dw_conn,
-        autocommit=True,
-    )
 
-_ = truncate_table >> extraction >> concat >> load >> vacuum_task >> analyze_task >> merge_data
+dag_factory()

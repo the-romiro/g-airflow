@@ -1,6 +1,5 @@
 SELECT
-    ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) as linha,
-    ? AS id_estabelecimento,
+    {estab} AS id_estabelecimento,
     Id,
     Maquina_ID,
     Codigo,

@@ -80,7 +80,7 @@ def extract_data(estab: Estabelecimento):
 
 
 @task(retries=2, retry_delay=timedelta(minutes=1))
-def concat_df_and_load_temp():
+def concat_and_load_stage():
     parquet_map = _get_parquet_map()
 
     if not parquet_map:
@@ -112,7 +112,11 @@ def concat_df_and_load_temp():
             log.info(f"[SKIP] '{tmp_table}' já existe")
             return
 
-        log.info("[START] Loading .parquet")
+        size_mb = con.sql(
+            f"SELECT SUM(total_uncompressed_size) / (1024*1024.0) FROM parquet_metadata([{paths_glob}])"
+        ).fetchone() or (0,)
+
+        log.info(f"[START] Loading .parquet ({size_mb[0]:.2f}MB)")
 
         con.execute(
             f"CREATE TEMP VIEW v_source AS SELECT * FROM read_parquet([{paths_glob}], union_by_name=true)"
@@ -160,7 +164,7 @@ def dag_factory():
     for_data = extract_data.override(task_id="extract_data_for")("for")
     cra_data = extract_data.override(task_id="extract_data_cra")("cra")
 
-    concat = concat_df_and_load_temp()
+    concat = concat_and_load_stage()
 
     merge = SQLExecuteQueryOperator(
         task_id="merge_table_and_drop_temp",
