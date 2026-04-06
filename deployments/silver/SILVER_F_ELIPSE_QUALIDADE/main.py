@@ -11,7 +11,7 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.task_group import TaskGroup
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, types
 
 from global_modules.ms_teams import notify_teams_on_failure, send_teams_message
 
@@ -107,6 +107,7 @@ def concat_data_and_load_temp():
         if_exists="replace",
         index=False,
         chunksize=5000,
+        dtype={"Maquina_ID_Origem": types.Integer()},
     )
 
     df.to_parquet(file_path)
