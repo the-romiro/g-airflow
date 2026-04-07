@@ -71,7 +71,7 @@ def extract_data(estab: Estabelecimento):
                 SELECT * EXCLUDE (rn) FROM (
                     SELECT *,
                         ROW_NUMBER() OVER (
-                            PARTITION BY "Maquina_ID", id_estabelecimento
+                            PARTITION BY "E3TimeStamp", "Maquina_ID", Codigo
                             ORDER BY "E3TimeStamp" DESC
                         ) AS rn
                     FROM df

@@ -1,6 +1,6 @@
 merge into elipse.silver.oee_fperformance as q
 using elipse.silver.temp_performance as o
-on q.data_hora = o."E3TimeStamp" and q.maquina_id = o."Maquina_ID" and q.id_estabelecimento = o.id_estabelecimento
+on q.data_hora = o."E3TimeStamp" and q.maquina_id = o."Maquina_ID" and q.id_estabelecimento = o.id_estabelecimento and q.codigo = o."Codigo"
 when matched and (
 	q.id_estabelecimento is distinct from o.id_estabelecimento or
 	q.data_hora is distinct from o."E3TimeStamp" or
