@@ -37,7 +37,7 @@ def insert_into_dbengenharia(df: pd.DataFrame, dtype: dict[str, TypeEngine]):
 
 
 @task(
-    retries=3,
+    retries=1,
     retry_delay=timedelta(minutes=1),
     retry_exponential_backoff=True,
     max_retry_delay=timedelta(minutes=30),
