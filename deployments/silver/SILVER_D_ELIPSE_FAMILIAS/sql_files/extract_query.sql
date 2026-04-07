@@ -1,5 +1,5 @@
 select
-    ? as id_estabelecimento,
+    {estab} as id_estabelecimento,
     [E3TimeStamp]
     ,[Indice]
     ,[Familia]
