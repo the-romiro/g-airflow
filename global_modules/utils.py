@@ -1,4 +1,8 @@
+from os import cpu_count
 from pathlib import Path
+
+# THREADS = (cpu_count() or 2) // 2
+DUCKDB_THREADS = 3
 
 
 def get_parquet_file(sufixo: str, root_path: str):
