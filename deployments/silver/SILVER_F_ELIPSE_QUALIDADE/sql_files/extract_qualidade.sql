@@ -1,6 +1,5 @@
-SELECT 
-    ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) as linha,
-    ? AS id_estabelecimento,
+SELECT
+    {estab} AS id_estabelecimento,
     E3TimeStamp
     ,Codigo
     ,Valor
@@ -15,4 +14,4 @@ SELECT
     ,Maquina_ID_Origem
 FROM [Elipse].[dbo].[Perdas_Qualidade] WITH (NOLOCK)
 WHERE
-(E3TimeStamp >= DATEADD(DAY, -31, CONVERT(DATE, GETDATE())))
+(E3TimeStamp >= DATEADD(DAY, -90, CONVERT(DATE, GETDATE())))

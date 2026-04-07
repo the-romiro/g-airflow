@@ -1,6 +1,6 @@
 merge into elipse.silver.oee_fqualidade as q
 using elipse.silver.temp_qualidade as o
-on (q.data_hora = o."E3TimeStamp" and q.maquina_id = o."Maquina_ID" and q.id_estabelecimento = o.id_estabelecimento)
+on (q.data_hora = o."E3TimeStamp" and q.maquina_id = o."Maquina_ID" and q.id_estabelecimento = o.id_estabelecimento and q.codigo = o."Codigo")
 when matched and (
 	q.id_estabelecimento is distinct from o.id_estabelecimento or
 	q.data_hora is distinct from o."E3TimeStamp" or
@@ -64,7 +64,7 @@ when not matched by target then
 		o."Maquina_ID_Origem",
 		now() - INTERVAL '3 hours'
 	)
-when not matched by source and q.data_hora >= CURRENT_DATE - INTERVAL '31 days' then
+when not matched by source and q.data_hora >= CURRENT_DATE - INTERVAL '90 days' then
 	delete;
 
 
