@@ -1,7 +1,7 @@
-DELETE FROM elipse.gold.elipse_fapoio 
-WHERE 
-	data_hora_inicio >= CURRENT_DATE - INTERVAL '60 days' 
-	or data_hora_fim >= CURRENT_DATE - INTERVAL '60 days';
+DELETE FROM elipse.gold.elipse_fapoio
+WHERE
+	data_hora_inicio >= CURRENT_DATE - INTERVAL '90 days'
+	or data_hora_fim >= CURRENT_DATE - INTERVAL '90 days';
 
 
 INSERT INTO elipse.gold.elipse_fapoio(
@@ -24,7 +24,7 @@ INSERT INTO elipse.gold.elipse_fapoio(
   cracha_preparador,
   cracha_lider
 )
-select  
+select
 	apoio.id_estabelecimento,
 	apoio.id,
 	apoio.data_hora_inicio,
@@ -49,6 +49,25 @@ left join elipse.silver.cadastros_maquinas maq on apoio.maquina_id = maq.id and 
 left join elipse.silver.cadastros_setores cs on maq.id_setor = cs.id and maq.id_estabelecimento = cs.id_estabelecimento
 left join elipse.silver.cadastros_fabricas cf on cs.id_fabrica = cf.id and cs.id_estabelecimento = cf.id_estabelecimento
 left join elipse.silver.cadastros_familias cfa on mtv.id_familia = cfa.id and mtv.id_estabelecimento = cfa.id_estabelecimento
-WHERE 
-  data_hora_inicio >= CURRENT_DATE - INTERVAL '60 days' 
-	or data_hora_fim >= CURRENT_DATE - INTERVAL '60 days';
+WHERE
+  data_hora_inicio >= CURRENT_DATE - INTERVAL '90 days'
+	or data_hora_fim >= CURRENT_DATE - INTERVAL '90 days'
+ON CONFLICT DO NOTHING;
+-- ON CONFLICT (id_estabelecimento, id)
+-- DO UPDATE SET
+--   data_hora_inicio     = EXCLUDED.data_hora_inicio,
+--   data_hora_fim        = EXCLUDED.data_hora_fim,
+--   tempo                = EXCLUDED.tempo,
+--   status               = EXCLUDED.status,
+--   codigo               = EXCLUDED.codigo,
+--   descricao_motivo     = EXCLUDED.descricao_motivo,
+--   familia              = EXCLUDED.familia,
+--   peso_oee             = EXCLUDED.peso_oee,
+--   maquina_id           = EXCLUDED.maquina_id,
+--   nome_equipamento     = EXCLUDED.nome_equipamento,
+--   id_setor             = EXCLUDED.id_setor,
+--   setor                = EXCLUDED.setor,
+--   id_fabrica           = EXCLUDED.id_fabrica,
+--   fabrica              = EXCLUDED.fabrica,
+--   cracha_preparador    = EXCLUDED.cracha_preparador,
+--   cracha_lider         = EXCLUDED.cracha_lider;

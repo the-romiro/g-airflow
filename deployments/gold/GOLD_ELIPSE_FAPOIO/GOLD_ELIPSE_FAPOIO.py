@@ -1,52 +1,55 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-import pendulum
-from airflow import DAG
 from airflow.datasets import Dataset
+from airflow.decorators import dag
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 from global_modules.ms_teams import notify_teams_on_failure
-
-DAG_ID = "GOLD_ELIPSE_FAPOIO"
-
-tz = pendulum.timezone("America/Fortaleza")
-
-start_date = pendulum.datetime(2025, 1, 26, 6, 5, tz=tz)
-
-default_args = {
-    "owner": "yan_arcanjo",
-    "start_date": start_date,
-    "on_failure_callback": notify_teams_on_failure,
-    "retry_delay": timedelta(minutes=5),
-    "retries": 1,
-}
+from global_modules.utils import read_sql_file
 
 gold_dataset = Dataset("elipse://gold/fapoio")
 
-with DAG(
-    DAG_ID,
+default_args = {
+    "owner": "yan_arcanjo",
+    "start_date": datetime(2025, 1, 26, 6, 5),
+    "on_failure_callback": notify_teams_on_failure,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=30),
+}
+
+
+@dag(
+    dag_id="GOLD_ELIPSE_FAPOIO",
     default_args=default_args,
     schedule=[gold_dataset],
     catchup=False,
-    tags=["elipse", "self_service", "gold"],
     max_active_runs=1,
-) as dag:
-    transform_data = SQLExecuteQueryOperator(
-        task_id="transform_silver_into_gold",
-        conn_id="postgres_eng_server",
-        sql="./sql_files/insert_silver_gold_fapoio.sql",
-    )
-    vacuum_task = SQLExecuteQueryOperator(
+    tags=["elipse", "self_service", "gold"],
+)
+def dag_factory():
+    vacuum = SQLExecuteQueryOperator(
         task_id="vacuum_task",
         sql="VACUUM elipse.gold.elipse_fapoio;",
         conn_id="postgres_eng_server",
-        autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
+        autocommit=True,
     )
-    analyze_task = SQLExecuteQueryOperator(
+
+    analyze = SQLExecuteQueryOperator(
         task_id="analyze_task",
         sql="ANALYZE elipse.gold.elipse_fapoio;",
         conn_id="postgres_eng_server",
         autocommit=True,
     )
 
-    _ = vacuum_task >> analyze_task >> transform_data
+    transform = SQLExecuteQueryOperator(
+        task_id="transform_silver_into_gold",
+        conn_id="postgres_eng_server",
+        sql=read_sql_file("insert_silver_gold_fapoio.sql", __file__),
+    )
+
+    _ = vacuum >> analyze >> transform
+
+
+dag_factory()

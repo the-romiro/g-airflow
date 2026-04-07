@@ -1,50 +1,40 @@
-import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-import pendulum
-from airflow import DAG
+from airflow.decorators import dag
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
-from global_modules.functions import get_global_config, get_local_config
+from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.operators import CustomSqlSensor
+from global_modules.utils import GLOBAL_FILES_PATH, read_sql_file
 
-DAG_ID = "GOLD_ELIPSE_DMAQUINAS"
-TEMPLATE_SEARCH_PATH = f"{os.environ['SEARCH_PATH']}/gold/{DAG_ID}/"
-TEMPLATE_SEARCH_PATH_GLOBAL = f"{os.environ['SEARCH_PATH_GLOBAL']}/"
-
-yaml_dependencies = get_global_config()
-dependencies = yaml_dependencies["wait_dependencies"]
-
-# Dependências
-yaml_data = get_local_config(f"gold/{DAG_ID}")
-dw_merge_maquinas = yaml_data["dw_commands"]["merge_maquinas"]
-
-tz = pendulum.timezone("America/Sao_Paulo")
+_WAIT_DEPS_SQL = read_sql_file("wait_dependencies.sql", str(GLOBAL_FILES_PATH))
 
 default_args = {
     "owner": "yan.arcanjo",
-    "start_date": pendulum.datetime(year=2022, month=8, day=18).astimezone(tz),
-    "email_on_failure": False,
-    "email_on_success": False,
-    "depends_on_past": False,
-    # "retry_delay": timedelta(minutes=1),
-    # "retries": 1,
+    "start_date": datetime(2022, 8, 18, 7, 0),
+    "on_failure_callback": notify_teams_on_failure,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=30),
 }
 
-with DAG(
-    DAG_ID,
+
+@dag(
+    dag_id="GOLD_ELIPSE_DMAQUINAS",
     description="Carga de dados GOLD_D_MAQUINAS_SIMON",
-    schedule="10 6 * * *",
     default_args=default_args,
+    schedule="10 6 * * *",
     catchup=False,
-    tags=["elipse", "self_service", "gold"],
+    max_active_runs=1,
     dagrun_timeout=timedelta(minutes=60),
-    template_searchpath=[TEMPLATE_SEARCH_PATH, TEMPLATE_SEARCH_PATH_GLOBAL],
-) as dag:
-    wait_dag_dependencies = CustomSqlSensor(
+    tags=["elipse", "self_service", "gold"],
+)
+def dag_factory():
+    wait = CustomSqlSensor(
         task_id="wait_dag_dependencies",
         conn_id="airflow_db",
-        sql=dependencies["sql"],
+        sql=_WAIT_DEPS_SQL,
         timeout=60 * 60 * 1,
         mode="reschedule",
         poke_interval=60 * 2,
@@ -60,11 +50,14 @@ with DAG(
         },
     )
 
-    merge_data = SQLExecuteQueryOperator(
+    merge = SQLExecuteQueryOperator(
         task_id="merge_stage_silver",
         conn_id="postgres_eng_server",
-        sql=dw_merge_maquinas["sql"],
+        sql=read_sql_file("merge_gold_dElipse_Maquinas.sql", __file__),
         autocommit=True,
     )
 
-    _ = wait_dag_dependencies >> merge_data
+    _ = wait >> merge
+
+
+dag_factory()
