@@ -1,5 +1,5 @@
-SELECT 
-    ? as id_estabelecimento,
+SELECT
+    {estab} as id_estabelecimento,
     [Id]
     ,[DataHoraInicio]
     ,[DataHoraFim]
@@ -10,10 +10,10 @@ SELECT
     ,[Cracha_Preparador]
     ,[Cracha_Lider]
 FROM [Elipse].[dbo].[Aciona_Apoios]
-WHERE 
-(DataHoraInicio >= DATEADD(DAY, -60, CONVERT(DATE, GETDATE())))
-OR 
-(DataHoraFim >= DATEADD(DAY, -60, CONVERT(DATE, GETDATE())))
+WHERE
+(DataHoraInicio >= DATEADD(DAY, -90, CONVERT(DATE, GETDATE())))
+OR
+(DataHoraFim >= DATEADD(DAY, -90, CONVERT(DATE, GETDATE())))
 
 
 -- DataHoraInicio between '2025-02-01 05:25:00' and '2025-03-01 06:00:00'

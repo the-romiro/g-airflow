@@ -1,75 +1,154 @@
-import pendulum
-from airflow import DAG
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import connectorx as cx
+import duckdb as ddb
 from airflow.datasets import Dataset
+from airflow.decorators import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
-from airflow.utils.task_group import TaskGroup
+from airflow.utils.log.logging_mixin import LoggingMixin
 
-from global_modules.operators import SqlServerOperator
+from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
+from global_modules.ms_teams import notify_teams_on_failure
+from global_modules.utils import DUCKDB_THREADS, get_parquet_file, read_sql_file
 
-DAG_ID = "SILVER_ELIPSE_FAPOIO"
-
-tz = pendulum.timezone("America/Fortaleza")
-
-start_date = pendulum.datetime(2025, 1, 26, 6, 5, tz=tz)
-
-default_args = {
-    "owner": "yan arcanjo",
-    "start_date": start_date,
-}
+log = LoggingMixin().log
 
 gold_dataset = Dataset("elipse://gold/fapoio")
 
-with DAG(
-    DAG_ID,
+default_args = {
+    "owner": "yan arcanjo",
+    "start_date": datetime(2025, 1, 26, 6, 5),
+    "on_failure_callback": notify_teams_on_failure,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=30),
+}
+
+extraction_sql = "extract_query.sql"
+STAGE_TABLE = "stage.stage_apoio"
+
+
+def _get_parquet_map() -> dict[Estabelecimento, Path]:
+    return {
+        "sob": get_parquet_file("sob", __file__),
+        "for": get_parquet_file("for", __file__),
+        "cra": get_parquet_file("cra", __file__),
+    }
+
+
+@task(retries=3, retry_delay=timedelta(minutes=2))
+def extract_data(estab: Estabelecimento):
+    parquet_file = _get_parquet_map()[estab]
+
+    if parquet_file.exists():
+        log.info(f"[SKIP] {estab} já processado")
+        return
+
+    log.info(f"[START] Extraindo {estab}")
+
+    sql = read_sql_file(extraction_sql, __file__)
+    estab_code = get_estab_code(estab)
+    sql_with_params = sql.format(estab=estab_code)
+
+    df = cx.read_sql(get_cx_conn(estab), sql_with_params, return_type="arrow")
+
+    log.info(f"[DONE QUERY] recuperados {df.shape[0]} linhas, {(df.nbytes / (1024**2)):.2f}MB")
+
+    temp_file = parquet_file.with_suffix(".tmp")
+
+    with ddb.connect(
+        config={
+            "threads": DUCKDB_THREADS,
+            "preserve_insertion_order": False,
+            "memory_limit": "2GB",
+        }
+    ) as con:
+        con.register("df", df)
+        con.execute(f"COPY (SELECT * FROM df) TO '{temp_file}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+
+    del df
+
+    temp_file.rename(parquet_file)
+
+    log.info(f"[DONE] {estab} -> parquet gravado")
+
+
+@task(retries=2, retry_delay=timedelta(minutes=1))
+def concat_and_load_stage():
+    parquet_map = _get_parquet_map()
+    parquet_paths = list(parquet_map.values())
+    paths_glob = ", ".join(f"'{p}'" for p in parquet_paths)
+    pg_con_str = get_duckdb_conn("pg")
+
+    with ddb.connect(
+        config={
+            "threads": DUCKDB_THREADS,
+            "preserve_insertion_order": False,
+            "memory_limit": "2GB",
+        }
+    ) as con:
+        con.execute(f"ATTACH '{pg_con_str}' AS pg (TYPE POSTGRES);")
+
+        already_loaded = con.sql(f"SELECT COUNT(1) FROM pg.{STAGE_TABLE}").fetchone()
+
+        if already_loaded and already_loaded[0] > 0:
+            log.info(f"[SKIP] '{STAGE_TABLE}' já carregada")
+            return
+
+        size_mb = con.sql(
+            f"SELECT SUM(total_uncompressed_size) / (1024*1024.0) FROM parquet_metadata([{paths_glob}])"
+        ).fetchone() or (0,)
+
+        log.info(f"[START] Carregando parquets ({size_mb[0]:.2f}MB)")
+
+        total_rows = con.execute(
+            f"INSERT INTO pg.{STAGE_TABLE} SELECT * FROM read_parquet([{paths_glob}], union_by_name=true)"
+        ).fetchone()
+
+        log.info(f"[DONE] Total linhas inseridas: {total_rows}")
+
+
+@task
+def clear_cache():
+    log.info("[CLEANUP] Limpando arquivos")
+    for parquet in _get_parquet_map().values():
+        parquet.unlink(missing_ok=True)
+
+
+@dag(
+    dag_id="SILVER_ELIPSE_FAPOIO",
     default_args=default_args,
     schedule="20 9,18 * * *",
     catchup=False,
-    tags=["elipse", "apoio", "silver"],
     max_active_runs=1,
-) as dag:
-    truncate_stage = SQLExecuteQueryOperator(
-        task_id="truncate_stage",
-        conn_id="postgres_eng_server",
-        sql="sql_files/truncate_stage.sql",
-    )
+    concurrency=4,
+    tags=["elipse", "apoio", "silver"],
+)
+def dag_factory():
+    sob_data = extract_data.override(task_id="extract_data_sob")("sob")
+    for_data = extract_data.override(task_id="extract_data_for")("for")
+    cra_data = extract_data.override(task_id="extract_data_cra")("cra")
 
-    extract_query_file = "sql_files/extract_query.sql"
-    target_table = "elipse.stage.stage_apoio"
+    concat = concat_and_load_stage()
 
-    with TaskGroup("extract_all") as extraction:
-        extract_sob = SqlServerOperator(
-            task_id="extract_sob",
-            source_conn_id="elipse_sob",
-            sql_path=extract_query_file,
-            estab=20,
-            filename="apoio_sob.csv",
-            target_conn_id="postgres_eng_server",
-            target_table=target_table,
-        )
-        extract_cra = SqlServerOperator(
-            task_id="extract_cra",
-            source_conn_id="elipse_cra",
-            sql_path=extract_query_file,
-            estab=40,
-            filename="apoio_cra.csv",
-            target_conn_id="postgres_eng_server",
-            target_table=target_table,
-        )
-        extract_for = SqlServerOperator(
-            task_id="extract_for",
-            source_conn_id="elipse_for",
-            sql_path=extract_query_file,
-            estab=21,
-            filename="apoio_for.csv",
-            target_conn_id="postgres_eng_server",
-            target_table=target_table,
-        )
-
-    insert_stage_silver = SQLExecuteQueryOperator(
+    insert_silver = SQLExecuteQueryOperator(
         task_id="insert_stage_silver",
         conn_id="postgres_eng_server",
-        sql="sql_files/insert_stage_silver_fapoio.sql",
+        sql=read_sql_file("insert_stage_silver_fapoio.sql", __file__),
         outlets=[gold_dataset],
     )
 
-    _ = truncate_stage >> extraction >> insert_stage_silver
+    truncate = SQLExecuteQueryOperator(
+        task_id="truncate_stage",
+        conn_id="postgres_eng_server",
+        sql=read_sql_file("truncate_stage.sql", __file__),
+    )
+
+    clear = clear_cache()
+
+    _ = [sob_data, for_data, cra_data] >> concat >> insert_silver >> truncate >> clear
+
+
+dag_factory()
