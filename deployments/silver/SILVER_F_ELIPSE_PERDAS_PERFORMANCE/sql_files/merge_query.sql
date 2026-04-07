@@ -65,7 +65,7 @@ when not matched by target then
 		o."Cracha_Lider",
 		now() - INTERVAL '3 hours'
 	)
-when not matched by source and q.data_hora >= CURRENT_DATE - INTERVAL '31 days' then
+when not matched by source and q.data_hora >= CURRENT_DATE - INTERVAL '90 days' then
 	delete;
 
 
