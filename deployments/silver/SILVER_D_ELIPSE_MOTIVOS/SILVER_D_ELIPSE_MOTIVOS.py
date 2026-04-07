@@ -1,132 +1,151 @@
-import logging
-import os
-from datetime import datetime
-from typing import Literal
+from datetime import datetime, timedelta
+from pathlib import Path
 
-import pandas as pd
-from airflow import DAG
-from airflow.hooks.base import BaseHook
-from airflow.operators.python import PythonOperator
+import connectorx as cx
+import duckdb as ddb
+from airflow.decorators import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-from sqlalchemy import create_engine
+from airflow.utils.log.logging_mixin import LoggingMixin
 
-from global_modules.ms_teams import notify_teams_on_failure, send_teams_message
+from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
+from global_modules.ms_teams import notify_teams_on_failure
+from global_modules.utils import DUCKDB_THREADS, get_parquet_file, read_sql_file
 
-# Pegando a pasta onde o script está
-PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
-
-
-# Nome da conexão definida no Airflow Connections
-connection_id_sob = "elipse_sob"
-connection_id_for = "elipse_for"
-connection_id_cra = "elipse_cra"
-
-type Estabelecimento = Literal["sob", "cra", "for"]
-
-
-def get_parquet_path(estab: Estabelecimento):
-    file_path = os.path.join(PASTA_ATUAL, f"extract_data_{str(estab)}.parquet")
-    return file_path
-
-
-# reads the sql file and returns the query
-def read_sql_file(file_path):
-    _dir = os.path.dirname(os.path.abspath(__file__))
-    sql_dir = os.path.join(_dir, f"sql_files/{file_path}")
-
-    with open(sql_dir, "r") as file:
-        query = file.read()
-    return query
-
+log = LoggingMixin().log
 
 default_args = {
     "owner": "yan arcanjo",
     "start_date": datetime(2025, 1, 26, 6, 5),
     "on_failure_callback": notify_teams_on_failure,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=30),
 }
 
 extraction_sql = "extract_query.sql"
 
 
-def extract_data(cod_estab: int):
-    match cod_estab:
-        case 20:
-            file_path = get_parquet_path("sob")
-            conn = BaseHook.get_connection(connection_id_sob)
-        case 21:
-            file_path = get_parquet_path("for")
-            conn = BaseHook.get_connection(connection_id_for)
-        case 40:
-            file_path = get_parquet_path("cra")
-            conn = BaseHook.get_connection(connection_id_cra)
-        case _:
-            raise ValueError("Código de estabelecimento inválido")
-
-    try:
-        url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
-        hook = create_engine(url)
-        params = (cod_estab,)  # id_estabelecimento
-        df = pd.read_sql_query(read_sql_file(extraction_sql), hook, params=params)
-        df.to_parquet(file_path)
-
-    except Exception as e:
-        logging.error(f"FALHA NA CONEXÃO COM O BANCO DE DADOS: {str(e)}")
-        send_teams_message(f"Erro de conexão com o banco de dados: {str(e)}")
-    return file_path
+def _get_parquet_map() -> dict[Estabelecimento, Path]:
+    return {
+        "sob": get_parquet_file("sob", __file__),
+        "for": get_parquet_file("for", __file__),
+        "cra": get_parquet_file("cra", __file__),
+    }
 
 
-def concat_data_and_load_temp():
+@task(retries=3, retry_delay=timedelta(minutes=2))
+def extract_data(estab: Estabelecimento):
+    parquet_file = _get_parquet_map()[estab]
 
-    file_path = os.path.join(PASTA_ATUAL, "concat_dataframes.parquet")
-    file_sob = get_parquet_path("sob")
-    file_for = get_parquet_path("for")
-    file_cra = get_parquet_path("cra")
+    if parquet_file.exists():
+        log.info(f"[SKIP] {estab} já processado")
+        return
 
-    df_sob = pd.read_parquet(file_sob)
-    df_for = pd.read_parquet(file_for)
-    df_cra = pd.read_parquet(file_cra)
+    log.info(f"[START] Extraindo {estab}")
 
-    df = pd.concat([df_sob, df_cra, df_for], ignore_index=True)
-    hook = PostgresHook(postgres_conn_id="postgres_eng_server")
-    df.to_sql(
-        "temp_motivos",
-        hook.get_sqlalchemy_engine({"executemany_mode": "values"}),
-        schema="silver",
-        if_exists="replace",
-        index=False,
-        chunksize=1000,
-    )
+    sql = read_sql_file(extraction_sql, __file__)
+    estab_code = get_estab_code(estab)
+    sql_with_params = sql.format(estab=estab_code)
 
-    df.to_parquet(file_path)
+    df = cx.read_sql(get_cx_conn(estab), sql_with_params, return_type="arrow")
 
-    return file_path
+    log.info(f"[DONE QUERY] recuperados {df.shape[0]} linhas, {(df.nbytes / (1024**2)):.2f}MB")
+
+    temp_file = parquet_file.with_suffix(".tmp")
+
+    with ddb.connect(
+        config={
+            "threads": DUCKDB_THREADS,
+            "preserve_insertion_order": False,
+            "memory_limit": "1GB",
+        }
+    ) as con:
+        con.register("df", df)
+        con.execute(f"COPY (SELECT * FROM df) TO '{temp_file}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+
+    del df
+
+    temp_file.rename(parquet_file)
+
+    log.info(f"[DONE] {estab} -> parquet gravado")
 
 
-with DAG(
-    "SILVER_D_MOTIVOS_SIMON",
+@task(retries=2, retry_delay=timedelta(minutes=1))
+def concat_and_load_stage():
+    parquet_map = _get_parquet_map()
+    parquet_paths = list(parquet_map.values())
+    paths_glob = ", ".join(f"'{p}'" for p in parquet_paths)
+    pg_con_str = get_duckdb_conn("pg")
+    tmp_table = "silver.temp_motivos"
+
+    with ddb.connect(
+        config={
+            "threads": DUCKDB_THREADS,
+            "preserve_insertion_order": False,
+            "memory_limit": "2GB",
+        }
+    ) as con:
+        con.execute(f"ATTACH '{pg_con_str}' AS pg (TYPE POSTGRES);")
+
+        check_table_query = f"SELECT to_regclass('{tmp_table}') IS NOT NULL"
+        tmp_table_exists = con.sql(
+            f"SELECT * FROM postgres_query('pg', $${check_table_query}$$)"
+        ).fetchone()
+
+        if tmp_table_exists is not None and tmp_table_exists[0]:
+            log.info(f"[SKIP] '{tmp_table}' já existe")
+            return
+
+        size_mb = con.sql(
+            f"SELECT SUM(total_uncompressed_size) / (1024*1024.0) FROM parquet_metadata([{paths_glob}])"
+        ).fetchone() or (0,)
+
+        log.info(f"[START] Carregando parquets ({size_mb[0]:.2f}MB)")
+
+        con.execute(
+            f"CREATE TEMP VIEW v_source AS SELECT * FROM read_parquet([{paths_glob}], union_by_name=true)"
+        )
+
+        con.execute(f"CREATE OR REPLACE TABLE pg.{tmp_table} AS SELECT * FROM v_source LIMIT 0")
+
+        total_rows = con.execute(f"INSERT INTO pg.{tmp_table} SELECT * FROM v_source").fetchone()
+
+        log.info(f"[DONE] Total linhas inseridas: {total_rows}")
+
+
+@task
+def clear_cache():
+    log.info("[CLEANUP] Limpando arquivos")
+    for parquet in _get_parquet_map().values():
+        parquet.unlink(missing_ok=True)
+
+
+@dag(
+    dag_id="SILVER_D_MOTIVOS_SIMON",
     default_args=default_args,
     schedule="10 9 * * *",
     catchup=False,
     max_active_runs=1,
-) as dag:
-    extract_sob = PythonOperator(
-        task_id="extract_data_sob", python_callable=extract_data, op_args=[20]
-    )
-    extract_for = PythonOperator(
-        task_id="extract_data_for", python_callable=extract_data, op_args=[21]
-    )
-    extract_cra = PythonOperator(
-        task_id="extract_data_cra", python_callable=extract_data, op_args=[40]
-    )
+    concurrency=4,
+    tags=["elipse", "silver", "simon"],
+)
+def dag_factory():
+    sob_data = extract_data.override(task_id="extract_data_sob")("sob")
+    for_data = extract_data.override(task_id="extract_data_for")("for")
+    cra_data = extract_data.override(task_id="extract_data_cra")("cra")
 
-    concat_and_load_temp = PythonOperator(
-        task_id="concat_data_and_load_temp", python_callable=concat_data_and_load_temp
-    )
-    merge_data = SQLExecuteQueryOperator(
+    concat = concat_and_load_stage()
+
+    merge = SQLExecuteQueryOperator(
         task_id="merge_table_and_drop_temp",
         conn_id="postgres_eng_server",
-        sql="./sql_files/merge_query.sql",
+        sql=read_sql_file("merge_query.sql", __file__),
     )
 
-    _ = [extract_sob, extract_for, extract_cra] >> concat_and_load_temp >> merge_data
+    clear = clear_cache()
+
+    _ = [sob_data, for_data, cra_data] >> concat >> merge >> clear
+
+
+dag_factory()
