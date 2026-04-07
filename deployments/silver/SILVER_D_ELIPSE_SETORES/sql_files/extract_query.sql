@@ -1,5 +1,5 @@
 SELECT
-    ? AS id_estabelecimento,
+    {estab} AS id_estabelecimento,
     ID,
     ID_Fabrica,
     Pavilhao
