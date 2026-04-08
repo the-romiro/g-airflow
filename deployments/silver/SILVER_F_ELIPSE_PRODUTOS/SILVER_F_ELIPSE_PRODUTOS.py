@@ -124,7 +124,7 @@ def clear_cache():
 @dag(
     dag_id="SILVER_F_PRODUTOS_SIMON",
     default_args=default_args,
-    schedule="10 9 * * *",
+    schedule="10 9,18 * * *",
     catchup=False,
     max_active_runs=1,
     concurrency=4,
