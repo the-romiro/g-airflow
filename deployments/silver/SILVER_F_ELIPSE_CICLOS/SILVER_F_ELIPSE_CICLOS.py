@@ -32,6 +32,10 @@ def _get_parquet_map() -> dict[Estabelecimento, Path]:
     }
 
 
+def _get_merged_parquet() -> Path:
+    return get_parquet_file("merged", __file__)
+
+
 @task(retries=3, retry_delay=timedelta(minutes=2))
 def extract_data(estab: Estabelecimento):
     parquet_file = _get_parquet_map()[estab]
@@ -42,7 +46,7 @@ def extract_data(estab: Estabelecimento):
 
     log.info(f"[START] Descobrindo tabelas Ciclo em {estab}")
 
-    # Step 1: descobrir tabelas Ciclo disponíveis na planta
+    # Step 1: descobrir tabelas Ciclo disponíveis
     tables = cx.read_sql(
         get_cx_conn(estab),
         read_sql_file("discover_tables.sql", __file__),
@@ -56,13 +60,12 @@ def extract_data(estab: Estabelecimento):
         log.warning(f"[WARN] Nenhuma tabela Ciclo encontrada em {estab}, abortando")
         return
 
-    # Step 2: janela de 10 dias (fallback para máquinas novas)
+    # Step 2: janela de dias (fallback para máquinas novas)
     dt_fim = datetime.now()
-    dt_inicio = dt_fim - timedelta(days=10)
+    dt_inicio = dt_fim - timedelta(days=31)
 
     estab_code = get_estab_code(estab)
 
-    log.info(get_cx_conn("pg"))
     # Step 3: buscar último registro por máquina em silver.oee_fciclos
     silver_df = cx.read_sql(
         get_cx_conn("pg"),
@@ -137,7 +140,7 @@ def extract_data(estab: Estabelecimento):
         for name in tables_with_new_data
     ]
 
-    # Step 7: executar via connectorx em paralelo (até 8 threads)
+    # Step 7: executar em paralelo (até 8 threads)
     n_threads = min(8, len(parts))
     chunk_size = -(-len(parts) // n_threads)  # ceiling division
     queries = [
@@ -156,72 +159,63 @@ def extract_data(estab: Estabelecimento):
         config={
             "threads": DUCKDB_THREADS,
             "preserve_insertion_order": False,
-            "memory_limit": "2GB",
+            "memory_limit": "3GB",
         }
     ) as con:
         con.register("df", df)
         con.execute(f"COPY (SELECT * FROM df) TO '{temp_file}' (FORMAT PARQUET, COMPRESSION ZSTD)")
 
-    del df
+    del df  # clear memory
 
     temp_file.rename(parquet_file)
 
     log.info(f"[DONE] {estab} -> parquet gravado")
 
 
-@task(retries=2, retry_delay=timedelta(minutes=1))
-def concat_and_load_stage():
-    parquet_map = _get_parquet_map()
-    # incluir apenas parquets que existem (planta pode não ter tabelas Ciclo)
-    parquet_paths = [p for p in parquet_map.values() if p.exists()]
+@task
+def merge_parquets():
+    parquet_paths = [p for p in _get_parquet_map().values() if p.exists()]
 
     if not parquet_paths:
-        log.warning("[WARN] Nenhum parquet disponível para carregar")
+        log.warning("[WARN] Nenhum parquet disponível para mesclar")
         return
 
+    merged_file = _get_merged_parquet()
+    temp_file = merged_file.with_suffix(".tmp")
     paths_glob = ", ".join(f"'{p}'" for p in parquet_paths)
-    pg_con_str = get_duckdb_conn("pg")
-    tmp_table = "silver.temp_ciclos"
 
-    with ddb.connect(
-        config={
-            "threads": DUCKDB_THREADS,
-            "preserve_insertion_order": False,
-            "memory_limit": "2GB",
-        }
-    ) as con:
-        con.execute(f"ATTACH '{pg_con_str}' AS pg (TYPE POSTGRES);")
-
-        check_table_query = f"SELECT to_regclass('{tmp_table}') IS NOT NULL"
-        tmp_table_exists = con.sql(
-            f"SELECT * FROM postgres_query('pg', $${check_table_query}$$)"
-        ).fetchone()
-
-        if tmp_table_exists is not None and tmp_table_exists[0]:
-            log.info(f"[SKIP] '{tmp_table}' já existe")
-            return
-
-        size_mb = con.sql(
-            f"SELECT SUM(total_uncompressed_size) / (1024*1024.0) FROM parquet_metadata([{paths_glob}])"
-        ).fetchone() or (0,)
-
-        log.info(f"[START] Carregando parquets ({size_mb[0]:.2f}MB)")
-
+    with ddb.connect(config={"threads": DUCKDB_THREADS, "memory_limit": "2GB"}) as con:
         con.execute(
-            f"CREATE TEMP VIEW v_source AS SELECT * FROM read_parquet([{paths_glob}], union_by_name=true)"
+            f"COPY (SELECT * FROM read_parquet([{paths_glob}], union_by_name=true)) "
+            f"TO '{temp_file}' (FORMAT PARQUET, COMPRESSION ZSTD)"
         )
 
-        con.execute(f"CREATE OR REPLACE TABLE pg.{tmp_table} AS SELECT * FROM v_source LIMIT 0")
+    temp_file.rename(merged_file)
+    log.info(f"[DONE] {len(parquet_paths)} parquets mesclados → {merged_file.name}")
 
-        total_rows = con.execute(f"INSERT INTO pg.{tmp_table} SELECT * FROM v_source").fetchone()
 
-        log.info(f"[DONE] Total linhas inseridas: {total_rows}")
+@task(retries=2, retry_delay=timedelta(minutes=1))
+def copy_to_stage():
+    merged_file = _get_merged_parquet()
+
+    if not merged_file.exists():
+        log.warning("[WARN] Parquet mesclado não encontrado, abortando")
+        return
+
+    pg_con_str = get_duckdb_conn("pg")
+
+    with ddb.connect(config={"threads": DUCKDB_THREADS, "memory_limit": "2GB"}) as con:
+        con.execute(f"ATTACH '{pg_con_str}' AS pg (TYPE POSTGRES);")
+        con.execute(f"COPY pg.stage.stage_ciclos FROM '{merged_file}' (FORMAT PARQUET);")
+
+    log.info("[DONE] COPY concluído → stage.stage_ciclos")
 
 
 @task
 def clear_cache():
-    log.info("[CLEANUP] Limpando arquivos")
-    for parquet in _get_parquet_map().values():
+    log.info("[CLEANUP] Limpando parquets.")
+
+    for parquet in [*_get_parquet_map().values(), _get_merged_parquet()]:
         parquet.unlink(missing_ok=True)
 
 
@@ -239,18 +233,25 @@ def dag_factory():
     for_data = extract_data.override(task_id="extract_data_for")("for")
     cra_data = extract_data.override(task_id="extract_data_cra")("cra")
 
-    concat = concat_and_load_stage()
+    merge_parquet = merge_parquets()
+    copy = copy_to_stage()
 
-    merge = SQLExecuteQueryOperator(
-        task_id="merge_table_and_drop_temp",
+    merge_table = SQLExecuteQueryOperator(
+        task_id="merge_stage_to_silver",
         conn_id="postgres_eng_server",
         sql=read_sql_file("merge_query.sql", __file__),
         autocommit=True,
     )
 
+    truncate = SQLExecuteQueryOperator(
+        task_id="truncate_stage",
+        conn_id="postgres_eng_server",
+        sql="TRUNCATE TABLE stage.stage_ciclos;",
+    )
+
     clear = clear_cache()
 
-    _ = [sob_data, for_data, cra_data] >> concat >> merge >> clear
+    _ = [sob_data, for_data, cra_data] >> merge_parquet >> copy >> merge_table >> truncate >> clear
 
 
 dag_factory()

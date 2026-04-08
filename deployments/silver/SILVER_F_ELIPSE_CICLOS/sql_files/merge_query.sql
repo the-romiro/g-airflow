@@ -1,5 +1,5 @@
 MERGE INTO elipse.silver.oee_fciclos AS q
-USING elipse.silver.temp_ciclos AS o
+USING stage.stage_ciclos AS o
 ON  q.data_hora          = o."E3TimeStamp"
 AND q.id_equipamento     = o.id_equipamento
 AND q.id_estabelecimento = o.id_estabelecimento
@@ -65,6 +65,3 @@ WHEN NOT MATCHED BY TARGET THEN
     )
 WHEN NOT MATCHED BY SOURCE
     AND q.data_hora >= CURRENT_DATE - INTERVAL '30 days' THEN DELETE;
-
-
-DROP TABLE elipse.silver.temp_ciclos;
