@@ -1,319 +1,193 @@
-import os
-from datetime import datetime, timedelta, timezone
-from typing import Literal
+from datetime import date, datetime, timedelta
+from pathlib import Path
 
-import pandas as pd
-from airflow import DAG
-from airflow.decorators import task
-from airflow.hooks.base import BaseHook
-from airflow.models import Variable
-from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import PythonOperator
-from airflow.utils.task_group import TaskGroup
-from sqlalchemy import create_engine
+import connectorx as cx
+import duckdb as ddb
+from airflow.decorators import dag, task
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+from airflow.utils.log.logging_mixin import LoggingMixin
 
+from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
 from global_modules.ms_teams import notify_teams_on_failure
+from global_modules.utils import DUCKDB_THREADS, get_parquet_file, read_sql_file
 
-# Obter data e hora atual
-data_hora_atual = (datetime.now()).strftime("%Y%m%d%H%M%S")
+log = LoggingMixin().log
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PARQUET_FOLDER = os.path.join(HERE, "parquet_files")
-
-NUM_FILIAL = {"elipse_sob": 20, "elipse_for": 21, "elipse_cra": 40}
-
-elipse_conn = Literal["elipse_sob", "elipse_for", "elipse_cra"]
-
-
-# reads the sql file and returns the query
-def read_sql_file(file_path: str):
-    _dir = os.path.dirname(os.path.abspath(__file__))
-    sql_dir = os.path.join(_dir, f"sql_files/{file_path}")
-
-    with open(sql_dir, "r") as file:
-        query = file.read()
-    return query
-
+DISCOVER_SQL = """
+SELECT TABLE_NAME
+FROM [Elipse].INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME LIKE 'Ciclo %'
+AND TABLE_NAME NOT IN ('Ciclo 0', 'Ciclo_Plastisol')
+AND TABLE_TYPE = 'BASE TABLE'
+"""
 
 default_args = {
     "owner": "yan arcanjo",
     "start_date": datetime(2025, 1, 26, 6, 5),
     "on_failure_callback": notify_teams_on_failure,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=30),
 }
 
 
-def get_url(filial: elipse_conn):
-    conn = BaseHook.get_connection(filial)
-    url = f"mssql+pyodbc://{conn.login}:{conn.password}@{conn.host}/{conn.schema}?driver=ODBC+Driver+17+for+SQL+Server"
-    return url
+def _get_parquet_map() -> dict[Estabelecimento, Path]:
+    return {
+        "sob": get_parquet_file("sob", __file__),
+        "for": get_parquet_file("for", __file__),
+        "cra": get_parquet_file("cra", __file__),
+    }
 
 
-def get_conn(url):
-    return create_engine(
-        url,
-        pool_pre_ping=True,  # checa se a conexão está viva antes de usar
-        pool_recycle=1800,  # recicla conexões inativas após 30 min
-        pool_timeout=30,  # espera até 30s por uma conexão
-    )
+@task(retries=3, retry_delay=timedelta(minutes=2))
+def extract_data(estab: Estabelecimento):
+    parquet_file = _get_parquet_map()[estab]
+
+    if parquet_file.exists():
+        log.info(f"[SKIP] {estab} já processado")
+        return
+
+    log.info(f"[START] Descobrindo tabelas Ciclo em {estab}")
+
+    # Step 1: descobrir tabelas Ciclo disponíveis na planta
+    tables = cx.read_sql(get_cx_conn(estab), DISCOVER_SQL, return_type="arrow")
+    table_names = tables["TABLE_NAME"].to_pylist()
+
+    log.info(f"[INFO] {len(table_names)} tabelas encontradas em {estab}")
+
+    if not table_names:
+        log.warning(f"[WARN] Nenhuma tabela Ciclo encontrada em {estab}, abortando")
+        return
+
+    # Step 2: janela de 30 dias
+    dt_fim = datetime.now()
+    dt_inicio = dt_fim - timedelta(days=10)
+
+    # Step 3: montar UNION ALL a partir do template por tabela
+    template = read_sql_file("extract_ciclos.sql", __file__)
+    estab_code = get_estab_code(estab)
+
+    parts = [
+        template.format(
+            estab=estab_code,
+            id_equipamento=name[6:],  # "Ciclo 123" → "123"
+            table_name=name,
+            dt_inicio=dt_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+            dt_fim=dt_fim.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        for name in table_names
+    ]
+
+    full_sql = "\nUNION ALL\n".join(parts)
+
+    # Step 4: executar UNION ALL via connectorx
+    df = cx.read_sql(get_cx_conn(estab), full_sql, return_type="arrow")
+
+    log.info(f"[DONE QUERY] {df.shape[0]} linhas, {(df.nbytes / (1024**2)):.2f}MB")
+
+    # Step 5: gravar parquet ZSTD com write atômico
+    temp_file = parquet_file.with_suffix(".tmp")
+
+    with ddb.connect(
+        config={
+            "threads": DUCKDB_THREADS,
+            "preserve_insertion_order": False,
+            "memory_limit": "2GB",
+        }
+    ) as con:
+        con.register("df", df)
+        con.execute(f"COPY (SELECT * FROM df) TO '{temp_file}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+
+    del df
+
+    temp_file.rename(parquet_file)
+
+    log.info(f"[DONE] {estab} -> parquet gravado")
 
 
-def get_sql_ciclos(filial: elipse_conn):
-    url = get_url(filial)
+@task(retries=2, retry_delay=timedelta(minutes=1))
+def concat_and_load_stage():
+    parquet_map = _get_parquet_map()
+    # incluir apenas parquets que existem (planta pode não ter tabelas Ciclo)
+    parquet_paths = [p for p in parquet_map.values() if p.exists()]
 
-    params = (NUM_FILIAL[filial],)  # id_estabelecimento
-    conn = get_conn(url)
+    if not parquet_paths:
+        log.warning("[WARN] Nenhum parquet disponível para carregar")
+        return
 
-    print(f"Pegando SQL de {params}")
+    paths_glob = ", ".join(f"'{p}'" for p in parquet_paths)
+    pg_con_str = get_duckdb_conn("pg")
+    tmp_table = "silver.temp_ciclos"
 
-    df = pd.read_sql_query(read_sql_file("extract_ciclos.sql"), conn, params=params)
+    with ddb.connect(
+        config={
+            "threads": DUCKDB_THREADS,
+            "preserve_insertion_order": False,
+            "memory_limit": "2GB",
+        }
+    ) as con:
+        con.execute(f"ATTACH '{pg_con_str}' AS pg (TYPE POSTGRES);")
 
-    print(f"SQL OK {df.shape}")
+        check_table_query = f"SELECT to_regclass('{tmp_table}') IS NOT NULL"
+        tmp_table_exists = con.sql(
+            f"SELECT * FROM postgres_query('pg', $${check_table_query}$$)"
+        ).fetchone()
 
-    return str(df.iloc[0, 0])
+        if tmp_table_exists is not None and tmp_table_exists[0]:
+            log.info(f"[SKIP] '{tmp_table}' já existe")
+            return
 
+        size_mb = con.sql(
+            f"SELECT SUM(total_uncompressed_size) / (1024*1024.0) FROM parquet_metadata([{paths_glob}])"
+        ).fetchone() or (0,)
 
-def extract_data_sob(parquet_name, sql):
-    full_path = os.path.join(PARQUET_FOLDER, parquet_name)
+        log.info(f"[START] Carregando parquets ({size_mb[0]:.2f}MB)")
 
-    if os.path.exists(full_path):
-        return False
+        con.execute(
+            f"CREATE TEMP VIEW v_source AS SELECT * FROM read_parquet([{paths_glob}], union_by_name=true)"
+        )
 
-    url = get_url("elipse_sob")
+        con.execute(f"CREATE OR REPLACE TABLE pg.{tmp_table} AS SELECT * FROM v_source LIMIT 0")
 
-    conn = get_conn(url)
-    df = pd.read_sql_query(sql, conn)
+        total_rows = con.execute(f"INSERT INTO pg.{tmp_table} SELECT * FROM v_source").fetchone()
 
-    print(parquet_name, df.shape)
-
-    df.to_parquet(full_path)
-
-    return True
-
-
-def extract_data_for(parquet_name, sql):
-    full_path = os.path.join(PARQUET_FOLDER, parquet_name)
-
-    if os.path.exists(full_path):
-        return False
-
-    url = get_url("elipse_for")
-
-    conn = get_conn(url)
-    df = pd.read_sql_query(sql, conn)
-
-    print(parquet_name, df.shape)
-
-    df.to_parquet(full_path)
-
-    return True
-
-
-def extract_data_cra(parquet_name, sql):
-    full_path = os.path.join(PARQUET_FOLDER, parquet_name)
-
-    if os.path.exists(full_path):
-        return False
-
-    url = get_url("elipse_cra")
-
-    conn = get_conn(url)
-    df = pd.read_sql_query(sql, conn)
-
-    print(parquet_name, df.shape)
-
-    df.to_parquet(full_path)
-
-    return True
-
-
-def concat_data_and_load_temp(
-    if_exists: Literal["replace", "append"],
-    parquet_files,
-    **kwargs,
-):
-    # ti = kwargs["ti"]
-    # df_sob = ti.xcom_pull(task_ids=f"extract_all_{suffix}.extract_data_sob_{suffix}")
-    # df_cra = ti.xcom_pull(task_ids=f"extract_all_{suffix}.extract_data_cra_{suffix}")
-    # df_for = ti.xcom_pull(task_ids=f"extract_all_{suffix}.extract_data_for_{suffix}")
-
-    df = pd.concat(
-        [pd.read_parquet(os.path.join(PARQUET_FOLDER, p)) for p in parquet_files],
-        ignore_index=True,
-    )
-
-    # df.to_parquet(
-    #     f"/datalake/bronze/bronze_elipse_paradas/bronze_elipse_paradas{data_hora_atual}.parquet", index=False
-    # )
-
-    # df.drop(columns=['linha'])
-
-    # df = df.sort_values("E3TimeStamp").drop_duplicates(subset=["Id", "id_estabelecimento"], keep="last")
-
-    # hook = PostgresHook(postgres_conn_id="postgres_eng_server")
-
-    # Antonio 19/06/2025, retirei 'PostgresHook' porque não estava resolvendo o ip do postgres.
-    pg_conn = get_conn(Variable.get("PG_CONN"))
-
-    # if_exists = "replace"
-    # for f in parquet_files:
-    # df = pd.read_parquet(os.path.join(PARQUET_FOLDER, f))
-
-    print("concat_data_and_load_temp:", df.shape)
-
-    df.to_sql(
-        "temp_ciclos",
-        pg_conn,
-        schema="silver",
-        chunksize=50_000,
-        if_exists=if_exists,
-        index=False,
-    )
-
-    # if_exists = "append"
-
-    print("finalizado.")
+        log.info(f"[DONE] Total linhas inseridas: {total_rows}")
 
 
 @task
-def delete_pq_records(dt_delete):
-    pg_conn = get_conn(Variable.get("PG_CONN"))
-
-    df_last_date = pd.read_sql(read_sql_file("ultimo_dia.sql"), pg_conn)
-
-    last_date_fim = df_last_date.iloc[0, 1]
-
-    sql_delete_first_day = (
-        f"DELETE FROM silver.temp_ciclos WHERE \"E3TimeStamp\" < '{last_date_fim}'"
-    )
-    sql_delete_last_days = f"DELETE FROM silver.temp_ciclos WHERE \"E3TimeStamp\" >= '{dt_delete}'"
-
-    print(sql_delete_first_day)
-
-    df = pd.read_sql(sql_delete_first_day, pg_conn)
-    print("first day", df)
-
-    df = pd.read_sql(sql_delete_last_days, pg_conn)
-    print("last days", df)
-
-    # df = pd.read_sql("REINDEX TABLE temp_ciclos;", pg_conn)
-    # print("REINDEX", df)
+def clear_cache():
+    log.info("[CLEANUP] Limpando arquivos")
+    for parquet in _get_parquet_map().values():
+        parquet.unlink(missing_ok=True)
 
 
-@task
-def delete_parquet_files(dt_delete):
-    ...
-    # for f in Path(PARQUET_FOLDER).iterdir():
-
-
-with DAG(
-    "SILVER_F_CICLOS_SIMON",
+@dag(
+    dag_id="SILVER_F_CICLOS_SIMON",
     default_args=default_args,
     schedule="20 9,18 * * *",
     catchup=False,
     max_active_runs=1,
+    concurrency=3,
     tags=["elipse", "ciclos", "silver"],
-) as dag:
-    dt = datetime.now(timezone.utc) + timedelta(hours=3)
+)
+def dag_factory():
+    sob_data = extract_data.override(task_id="extract_data_sob")("sob")
+    for_data = extract_data.override(task_id="extract_data_for")("for")
+    cra_data = extract_data.override(task_id="extract_data_cra")("cra")
 
-    days = 7
-    step = 1  # math.ceil(days / 31)
+    concat = concat_and_load_stage()
 
-    previous_task = None
+    merge = SQLExecuteQueryOperator(
+        task_id="merge_table_and_drop_temp",
+        conn_id="postgres_eng_server",
+        sql=read_sql_file("merge_query.sql", __file__),
+        autocommit=True,
+    )
 
-    # sql_sob = get_sql_ciclos("elipse_sob")
-    # sql_for = get_sql_ciclos("elipse_for")
-    # sql_cra = get_sql_ciclos("elipse_cra")
+    clear = clear_cache()
 
-    for day_ini in range(days, 0, -step):
-        dt_inicio = (dt - timedelta(days=day_ini)).strftime("%Y-%m-%d")
-        dt_fim = (dt - timedelta(days=day_ini - step)).strftime("%Y-%m-%d")
+    _ = [sob_data, for_data, cra_data] >> concat >> merge >> clear
 
-        is_first = previous_task is None
 
-        with TaskGroup(f"extract_all_{dt_inicio}") as extraction:
-            sob_parquet_name = f"extract_data_sob_{dt_inicio}"
-            # extract_sob = PythonOperator(
-            #     task_id=sob_parquet_name,
-            #     python_callable=extract_data_sob,
-            #     op_kwargs={
-            #         "sql": sql_sob.format(dt_inicio=dt_inicio, dt_fim=dt_fim),
-            #         "parquet_name": f"{sob_parquet_name}.parquet",
-            #     },
-            # )
-
-            for_parquet_name = f"extract_data_for_{dt_inicio}"
-            # extract_for = PythonOperator(
-            #     task_id=for_parquet_name,
-            #     python_callable=extract_data_for,
-            #     op_kwargs={
-            #         "sql": sql_for.format(dt_inicio=dt_inicio, dt_fim=dt_fim),
-            #         "parquet_name": f"{for_parquet_name}.parquet",
-            #     },
-            # )
-
-            cra_parquet_name = f"extract_data_cra_{dt_inicio}"
-            # extract_cra = PythonOperator(
-            #     task_id=cra_parquet_name,
-            #     python_callable=extract_data_cra,
-            #     op_kwargs={
-            #         "sql": sql_cra.format(dt_inicio=dt_inicio, dt_fim=dt_fim),
-            #         "parquet_name": f"{cra_parquet_name}.parquet",
-            #     },
-            # )
-
-        parquet_files = (
-            f"{sob_parquet_name}.parquet",
-            f"{for_parquet_name}.parquet",
-            f"{cra_parquet_name}.parquet",
-        )
-
-        concat_and_load = PythonOperator(
-            task_id=f"concat_data_and_load_temp_{day_ini}",
-            python_callable=concat_data_and_load_temp,
-            op_kwargs={
-                # "if_exists": "replace" if is_first else "append",
-                "if_exists": "append",
-                "parquet_files": parquet_files,
-            },
-        )
-
-        # merge_data = PostgresOperator(
-        #     task_id="merge_table_and_drop_temp",
-        #     postgres_conn_id="postgres_eng_server",
-        #     sql="./sql_files/merge_query.sql",
-        #     autocommit=True
-        # )
-        # vacuum_task = PostgresOperator(
-        #     task_id="vacuum_task",
-        #     sql="VACUUM elipse.silver.oee_fparadas;",
-        #     postgres_conn_id="postgres_eng_server",  # Certifique-se de que você tenha a conexão configurada no Airflow
-        #     autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
-        # )
-        # analyze_task = PostgresOperator(
-        #     task_id="analyze_task",
-        #     sql="ANALYZE elipse.silver.oee_fparadas;",
-        #     postgres_conn_id="postgres_eng_server",
-        #     autocommit=True,
-        # )  # Usando TriggerDagRunOperator para acionar a DAG2 após a execução de DAG1
-        # trigger_dag = TriggerDagRunOperator(
-        #     task_id="trigger_gold_dag",
-        #     trigger_dag_id="GOLD_F_DISPONIBILIDADE_SIMON",  # Nome da DAG a ser acionada
-        # )
-
-        if is_first:
-            # >> EmptyOperator(task_id=f"t{day_ini}")  # >> concat_and_load
-            # extraction >> EmptyOperator(task_id=f"t{day_ini}")
-            concat_and_load >> EmptyOperator(task_id=f"t{day_ini}")
-
-        # Se houver uma task anterior, conecta ela à task atual
-        if previous_task:
-            # previous_task >> extraction
-            previous_task >> concat_and_load
-
-        # previous_task = extraction
-        previous_task = concat_and_load
-
-    # >> vacuum_task
-    # >> analyze_task
-    # >> merge_data
-    # >> trigger_dag
+dag_factory()
