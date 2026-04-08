@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import connectorx as cx
@@ -12,14 +12,6 @@ from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.utils import DUCKDB_THREADS, get_parquet_file, read_sql_file
 
 log = LoggingMixin().log
-
-DISCOVER_SQL = """
-SELECT TABLE_NAME
-FROM [Elipse].INFORMATION_SCHEMA.TABLES
-WHERE TABLE_NAME LIKE 'Ciclo %'
-AND TABLE_NAME NOT IN ('Ciclo 0', 'Ciclo_Plastisol')
-AND TABLE_TYPE = 'BASE TABLE'
-"""
 
 default_args = {
     "owner": "yan arcanjo",
@@ -51,7 +43,11 @@ def extract_data(estab: Estabelecimento):
     log.info(f"[START] Descobrindo tabelas Ciclo em {estab}")
 
     # Step 1: descobrir tabelas Ciclo disponíveis na planta
-    tables = cx.read_sql(get_cx_conn(estab), DISCOVER_SQL, return_type="arrow")
+    tables = cx.read_sql(
+        get_cx_conn(estab),
+        read_sql_file("discover_tables.sql", __file__),
+        return_type="arrow",
+    )
     table_names = tables["TABLE_NAME"].to_pylist()
 
     log.info(f"[INFO] {len(table_names)} tabelas encontradas em {estab}")
@@ -60,33 +56,100 @@ def extract_data(estab: Estabelecimento):
         log.warning(f"[WARN] Nenhuma tabela Ciclo encontrada em {estab}, abortando")
         return
 
-    # Step 2: janela de 30 dias
+    # Step 2: janela de 10 dias (fallback para máquinas novas)
     dt_fim = datetime.now()
     dt_inicio = dt_fim - timedelta(days=10)
 
-    # Step 3: montar UNION ALL a partir do template por tabela
-    template = read_sql_file("extract_ciclos.sql", __file__)
     estab_code = get_estab_code(estab)
 
+    log.info(get_cx_conn("pg"))
+    # Step 3: buscar último registro por máquina em silver.oee_fciclos
+    silver_df = cx.read_sql(
+        get_cx_conn("pg"),
+        read_sql_file("silver_max_por_maquina.sql", __file__).format(estab_code=estab_code),
+        return_type="arrow",
+    )
+    silver_maxima: dict[str, datetime] = {
+        str(equip): ts
+        for equip, ts in zip(
+            silver_df["id_equipamento"].to_pylist(),
+            silver_df["ultima_data_hora"].to_pylist(),
+        )
+        if ts is not None
+    }
+
+    log.info(f"[INFO] {len(silver_maxima)} máquinas com registros em silver para {estab}")
+
+    # Step 4: buscar MAX(E3TimeStamp) no SQL Server para todas as tabelas em lote
+    source_max_template = read_sql_file("source_max_por_maquina.sql", __file__)
+    max_parts = [
+        source_max_template.format(id_equipamento=name[6:], table_name=name) for name in table_names
+    ]
+    source_df = cx.read_sql(
+        get_cx_conn(estab),
+        "\nUNION ALL\n".join(max_parts),
+        return_type="arrow",
+    )
+    source_maxima: dict[str, datetime] = {
+        equip: ts
+        for equip, ts in zip(
+            source_df["id_equipamento"].to_pylist(),
+            source_df["max_ts"].to_pylist(),
+        )
+        if ts is not None
+    }
+
+    # Step 5: filtrar máquinas com novos ciclos
+    tables_with_new_data = []
+    for name in table_names:
+        id_equip = name[6:]  # "Ciclo 123" → "123"
+        source_max = source_maxima.get(id_equip)
+        silver_max = silver_maxima.get(id_equip)
+
+        if source_max is None:
+            log.info(f"[SKIP] {name}: sem dados no SQL Server")
+            continue
+
+        if silver_max is None or source_max > silver_max:
+            tables_with_new_data.append(name)
+        else:
+            log.info(f"[SKIP] {name}: sem novos ciclos (source={source_max}, silver={silver_max})")
+
+    if not tables_with_new_data:
+        log.info(f"[SKIP] {estab}: nenhuma máquina com novos ciclos")
+        return
+
+    log.info(
+        f"[INFO] {len(tables_with_new_data)}/{len(table_names)} máquinas com novos ciclos em {estab}"
+    )
+
+    # Step 6: montar UNION ALL apenas para máquinas com novos dados
+    extract_template = read_sql_file("extract_ciclos.sql", __file__)
+
     parts = [
-        template.format(
+        extract_template.format(
             estab=estab_code,
             id_equipamento=name[6:],  # "Ciclo 123" → "123"
             table_name=name,
             dt_inicio=dt_inicio.strftime("%Y-%m-%d %H:%M:%S"),
             dt_fim=dt_fim.strftime("%Y-%m-%d %H:%M:%S"),
         )
-        for name in table_names
+        for name in tables_with_new_data
     ]
 
-    full_sql = "\nUNION ALL\n".join(parts)
+    # Step 7: executar via connectorx em paralelo (até 8 threads)
+    n_threads = min(8, len(parts))
+    chunk_size = -(-len(parts) // n_threads)  # ceiling division
+    queries = [
+        "\nUNION ALL\n".join(parts[i : i + chunk_size]) for i in range(0, len(parts), chunk_size)
+    ]
 
-    # Step 4: executar UNION ALL via connectorx
-    df = cx.read_sql(get_cx_conn(estab), full_sql, return_type="arrow")
+    log.info(f"[INFO] Executando {len(queries)} queries em paralelo ({len(parts)} tabelas)")
+    df = cx.read_sql(get_cx_conn(estab), queries, return_type="arrow")
 
     log.info(f"[DONE QUERY] {df.shape[0]} linhas, {(df.nbytes / (1024**2)):.2f}MB")
 
-    # Step 5: gravar parquet ZSTD com write atômico
+    # Step 8: gravar parquet ZSTD com write atômico
     temp_file = parquet_file.with_suffix(".tmp")
 
     with ddb.connect(
