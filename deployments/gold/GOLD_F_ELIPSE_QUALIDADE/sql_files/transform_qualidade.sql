@@ -1,5 +1,5 @@
 with cte_qualidade as (
-select 
+select
 	q.id_estabelecimento,
 	q.data_hora,
 	q.codigo,
@@ -21,17 +21,17 @@ select
 	q.maquina_id_origem,
 	maq2.nome    as nome_equipamento_origem
 from elipse.silver.oee_fqualidade q
-left join elipse.silver.cadastros_motivos cm on q.codigo = cm.codigo and q.id_estabelecimento  = cm.id_estabelecimento 
-left join elipse.silver.cadastros_maquinas maq on q.maquina_id = maq.id and q.id_estabelecimento = maq.id_estabelecimento 
-left join elipse.silver.cadastros_setores cs on maq.id_setor = cs.id and q.id_estabelecimento = cs.id_estabelecimento 
-left join elipse.silver.cadastros_fabricas cf on cf.id = cs.id_fabrica and q.id_estabelecimento = cf.id_estabelecimento 
+left join elipse.silver.cadastros_motivos cm on q.codigo = cm.codigo and q.id_estabelecimento  = cm.id_estabelecimento
+left join elipse.silver.cadastros_maquinas maq on q.maquina_id = maq.id and q.id_estabelecimento = maq.id_estabelecimento
+left join elipse.silver.cadastros_setores cs on maq.id_setor = cs.id and q.id_estabelecimento = cs.id_estabelecimento
+left join elipse.silver.cadastros_fabricas cf on cf.id = cs.id_fabrica and q.id_estabelecimento = cf.id_estabelecimento
 left join elipse.silver.cadastros_maquinas maq2 on q.maquina_id_origem = maq2.id and q.id_estabelecimento = maq2.id_estabelecimento
-where q.data_hora >= CURRENT_DATE - INTERVAL '31 days'
+where q.data_hora >= CURRENT_DATE - INTERVAL '90 days'
 )
 merge into elipse.gold.oee_fqualidade q
-using cte_qualidade o 
-on q.id_estabelecimento = o.id_estabelecimento and q.id_equipamento = o.id_equipamento and q.data_hora = o.data_hora
-when matched then 
+using cte_qualidade o
+on q.id_estabelecimento = o.id_estabelecimento and q.id_equipamento = o.id_equipamento and q.data_hora = o.data_hora and q.codigo = o.codigo
+when matched then
 	update set
 		id_estabelecimento = o.id_estabelecimento,
 		data_hora = o.data_hora,
@@ -101,5 +101,5 @@ when not matched by target then
 		o.nome_equipamento_origem,
 		now() - INTERVAL '3 hours'
 	)
-	when not matched by source and q.data_hora >= CURRENT_DATE - INTERVAL '31 days' then
+	when not matched by source and q.data_hora >= CURRENT_DATE - INTERVAL '90 days' then
 	delete;
