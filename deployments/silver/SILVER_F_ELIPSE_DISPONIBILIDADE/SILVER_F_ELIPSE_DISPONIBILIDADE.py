@@ -11,7 +11,7 @@ from airflow.utils.log.logging_mixin import LoggingMixin
 
 from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
 from global_modules.ms_teams import notify_teams_on_failure
-from global_modules.utils import DUCKDB_THREADS, get_parquet_file, read_sql_file
+from global_modules.utils import get_parquet_file, read_sql_file
 
 log = LoggingMixin().log
 
@@ -63,13 +63,7 @@ def extract_data(estab: Estabelecimento):
 
     temp_file = parquet_file.with_suffix(".tmp")
 
-    with ddb.connect(
-        config={
-            "threads": DUCKDB_THREADS,
-            "preserve_insertion_order": False,
-            "memory_limit": "2GB",
-        }
-    ) as con:
+    with ddb.connect() as con:
         con.register("df", df)
         con.execute(
             f"""
@@ -102,13 +96,7 @@ def concat_and_load_stage():
 
     pg_conn_str = get_duckdb_conn("pg")
 
-    with ddb.connect(
-        config={
-            "threads": DUCKDB_THREADS,
-            "preserve_insertion_order": False,
-            "memory_limit": "2GB",
-        }
-    ) as con:
+    with ddb.connect() as con:
         con.execute(f"ATTACH '{pg_conn_str}' AS pg (TYPE POSTGRES);")
 
         already_loaded = con.sql(f"SELECT COUNT(1) FROM pg.{STAGE_TABLE}").fetchone()

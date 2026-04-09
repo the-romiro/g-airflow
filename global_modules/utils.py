@@ -1,8 +1,12 @@
-from os import cpu_count
 from pathlib import Path
 
-_THREADS = (cpu_count() or 2) // 2
 DUCKDB_THREADS = 3
+DUCKDB_SAVE_PARQUET_CONFIG: dict[str, str | bool | int | float | list[str]] = {
+    # "threads": 3,
+    "preserve_insertion_order": False,
+    # "memory_limit": "3GB",
+}
+
 GLOBAL_FILES_PATH = Path(__file__).parents[1].joinpath("global_files")
 
 
