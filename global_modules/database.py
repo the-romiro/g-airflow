@@ -80,3 +80,14 @@ def exec_merge(store_procedure: str):
         conn.execute(text(f"EXEC {store_procedure}"))  # type: ignore
         # conn.commit()
     log_message(f"✅ Merge concluído para '{store_procedure}'.")
+
+
+def get_ciclos_search_window() -> int:
+    value = Variable.get("SILVER_F_CICLOS_DAYS_TO_SEARCH", None)
+    if value is None:
+        raise ValueError("Variável do airflow 'SILVER_F_CICLOS_DAYS_TO_SEARCH' não foi definida.")
+
+    if type(value) is not int:
+        raise ValueError("Variável do airflow 'SILVER_F_CICLOS_DAYS_TO_SEARCH' deve ser int.")
+
+    return int(value)

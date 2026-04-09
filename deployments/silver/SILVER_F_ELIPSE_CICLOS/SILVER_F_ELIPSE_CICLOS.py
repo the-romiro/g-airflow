@@ -7,7 +7,13 @@ from airflow.decorators import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
 
-from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
+from global_modules.database import (
+    Estabelecimento,
+    get_ciclos_search_window,
+    get_cx_conn,
+    get_duckdb_conn,
+    get_estab_code,
+)
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.utils import get_parquet_file, get_sentinel_file, read_sql_file
 
@@ -66,7 +72,7 @@ def extract_data(estab: Estabelecimento):
 
     # Step 2: janela de dias (fallback para máquinas novas)
     dt_fim = datetime.now()
-    dt_inicio = dt_fim - timedelta(days=31)
+    dt_inicio = dt_fim - timedelta(days=get_ciclos_search_window())
 
     estab_code = get_estab_code(estab)
 
