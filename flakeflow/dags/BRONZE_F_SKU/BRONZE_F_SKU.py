@@ -82,12 +82,9 @@ def load_table():
         return
 
     with ddb.connect() as con:
-        size_mb = (
-            con.execute(
-                f"SELECT SUM(total_uncompressed_size) / (1024*1024.0) FROM parquet_metadata(['{parquet_file}'])"
-            ).fetchone()
-            or (0,)
-        )
+        size_mb = con.execute(
+            f"SELECT SUM(total_uncompressed_size) / (1024*1024.0) FROM parquet_metadata(['{parquet_file}'])"
+        ).fetchone() or (0,)
         log.info(f"[START] Carregando parquet ({size_mb[0]:.2f}MB)")
 
     with ddb.connect() as con:
@@ -99,10 +96,7 @@ def load_table():
             con.execute(
                 f"""
             INSERT INTO pg.ferramental.sku
-                (log_id, sku, descricao, status, qtdcif, fabrica, ferramenta, qtd_estoque)
-            SELECT
-                log_id::uuid, sku, descricao, status, qtdcif, fabrica, ferramenta, qtd_estoque
-            FROM read_parquet('{parquet_file}')
+            SELECT *, CURRENT_TIMESTAMP AS loaded_at FROM read_parquet('{parquet_file}')
         """
             ).fetchone()
             or (0,)

@@ -96,12 +96,7 @@ def load_table():
             con.execute(
                 f"""
             INSERT INTO pg.ferramental.area
-                (id, data_criacao, status, id_flake, cod_usuario,
-                des_area, data_reserva, justificativa, cod_sku, webhook_node_id)
-            SELECT
-                id::uuid, data_criacao, status, id_flake, cod_usuario,
-                des_area, data_reserva, justificativa, cod_sku, webhook_node_id
-            FROM read_parquet('{parquet_file}')
+            SELECT *, CURRENT_TIMESTAMP AS loaded_at FROM read_parquet('{parquet_file}')
         """
             ).fetchone()
             or (0,)
