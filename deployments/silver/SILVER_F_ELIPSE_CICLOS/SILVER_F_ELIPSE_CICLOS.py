@@ -9,7 +9,7 @@ from airflow.utils.log.logging_mixin import LoggingMixin
 
 from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
 from global_modules.ms_teams import notify_teams_on_failure
-from global_modules.utils import get_parquet_file, read_sql_file
+from global_modules.utils import get_parquet_file, get_sentinel_file, read_sql_file
 
 log = LoggingMixin().log
 
@@ -34,6 +34,10 @@ def _get_parquet_map() -> dict[Estabelecimento, Path]:
 
 def _get_merged_parquet() -> Path:
     return get_parquet_file("merged", __file__)
+
+
+def _get_sentinel(name: str) -> Path:
+    return get_sentinel_file(name, __file__)
 
 
 @task(retries=3, retry_delay=timedelta(minutes=2))
@@ -168,13 +172,18 @@ def extract_data(estab: Estabelecimento):
 
 @task
 def merge_parquets():
+    merged_file = _get_merged_parquet()
+
+    if merged_file.exists():
+        log.info(f"[SKIP] '{merged_file.name}' já processado")
+        return
+
     parquet_paths = [p for p in _get_parquet_map().values() if p.exists()]
 
     if not parquet_paths:
         log.warning("[WARN] Nenhum parquet disponível para mesclar")
         return
 
-    merged_file = _get_merged_parquet()
     temp_file = merged_file.with_suffix(".tmp")
     paths_glob = ", ".join(f"'{p}'" for p in parquet_paths)
 
@@ -190,6 +199,12 @@ def merge_parquets():
 
 @task(retries=2, retry_delay=timedelta(minutes=1))
 def copy_to_stage():
+    sentinel = _get_sentinel("copy_to_stage")
+
+    if sentinel.exists():
+        log.info("[SKIP] copy_to_stage já concluído")
+        return
+
     merged_file = _get_merged_parquet()
 
     if not merged_file.exists():
@@ -202,15 +217,18 @@ def copy_to_stage():
         con.execute(f"ATTACH '{pg_con_str}' AS pg (TYPE POSTGRES);")
         con.execute(f"COPY pg.stage.stage_ciclos FROM '{merged_file}' (FORMAT PARQUET);")
 
+    sentinel.touch()
     log.info("[DONE] COPY concluído → stage.stage_ciclos")
 
 
 @task
 def clear_cache():
-    log.info("[CLEANUP] Limpando parquets.")
+    log.info("[CLEANUP] Limpando parquets e sentinelas.")
 
     for parquet in [*_get_parquet_map().values(), _get_merged_parquet()]:
         parquet.unlink(missing_ok=True)
+
+    _get_sentinel("copy_to_stage").unlink(missing_ok=True)
 
 
 @dag(

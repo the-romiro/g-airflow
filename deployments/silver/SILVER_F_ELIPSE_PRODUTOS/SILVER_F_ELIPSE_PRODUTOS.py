@@ -9,7 +9,7 @@ from airflow.utils.log.logging_mixin import LoggingMixin
 
 from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
 from global_modules.ms_teams import notify_teams_on_failure
-from global_modules.utils import get_parquet_file, read_sql_file
+from global_modules.utils import get_parquet_file, get_sentinel_file, read_sql_file
 
 log = LoggingMixin().log
 
@@ -32,6 +32,10 @@ def _get_parquet_map() -> dict[Estabelecimento, Path]:
         "for": get_parquet_file("for", __file__),
         "cra": get_parquet_file("cra", __file__),
     }
+
+
+def _get_sentinel(name: str) -> Path:
+    return get_sentinel_file(name, __file__)
 
 
 @task(retries=3, retry_delay=timedelta(minutes=2))
@@ -67,6 +71,12 @@ def extract_data(estab: Estabelecimento):
 
 @task(retries=2, retry_delay=timedelta(minutes=1))
 def concat_and_load_stage():
+    sentinel = _get_sentinel("concat_and_load_stage")
+
+    if sentinel.exists():
+        log.info("[SKIP] concat_and_load_stage já concluído")
+        return
+
     parquet_map = _get_parquet_map()
     parquet_paths = list(parquet_map.values())
     paths_glob = ", ".join(f"'{p}'" for p in parquet_paths)
@@ -101,12 +111,15 @@ def concat_and_load_stage():
 
         log.info(f"[DONE] Total linhas inseridas: {total_rows}")
 
+    sentinel.touch()
+
 
 @task
 def clear_cache():
-    log.info("[CLEANUP] Limpando arquivos")
+    log.info("[CLEANUP] Limpando arquivos e sentinelas.")
     for parquet in _get_parquet_map().values():
         parquet.unlink(missing_ok=True)
+    _get_sentinel("concat_and_load_stage").unlink(missing_ok=True)
 
 
 @dag(
