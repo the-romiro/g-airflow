@@ -87,7 +87,7 @@ def get_ciclos_search_window() -> int:
     if value is None:
         raise ValueError("Variável do airflow 'SILVER_F_CICLOS_DAYS_TO_SEARCH' não foi definida.")
 
-    if type(value) is not int:
+    if not str(value).isdigit():
         raise ValueError("Variável do airflow 'SILVER_F_CICLOS_DAYS_TO_SEARCH' deve ser int.")
 
     return int(value)
