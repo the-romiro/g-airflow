@@ -1,0 +1,139 @@
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import connectorx as cx
+import duckdb as ddb
+from airflow.decorators import dag, task
+from airflow.utils.log.logging_mixin import LoggingMixin
+
+from global_modules.database import get_cx_conn, get_duckdb_conn
+from global_modules.ms_teams import notify_teams_on_failure
+from global_modules.utils import get_parquet_file, get_sentinel_file, read_sql_file
+
+log = LoggingMixin().log
+
+default_args = {
+    "owner": "Antonio Albuquerque",
+    "start_date": datetime(2025, 1, 26, 7, 0),
+    "on_failure_callback": notify_teams_on_failure,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=30),
+}
+
+DDB_PG_FLAKEFLOW = get_duckdb_conn("pg_flakeflow")
+
+
+def _get_parquet_file() -> Path:
+    return get_parquet_file("main", __file__)
+
+
+def _get_sentinel(name: str) -> Path:
+    return get_sentinel_file(name, __file__)
+
+
+@task(retries=3, retry_delay=timedelta(minutes=2))
+def extract_data():
+    parquet_file = _get_parquet_file()
+
+    if parquet_file.exists():
+        log.info("[SKIP] extração já processada")
+        return
+
+    log.info("[START] Extraindo dados de SKU do flakeflow")
+
+    df = cx.read_sql(
+        get_cx_conn("flakeflow"),
+        read_sql_file("extract_data.sql", __file__),
+        return_type="arrow",
+    )
+
+    log.info(f"[DONE QUERY] {df.shape[0]} linhas, {(df.nbytes / (1024**2)):.2f}MB")
+
+    if df.shape[0] == 0:
+        log.info("[SKIP] Nenhum registro na fonte")
+        return
+
+    temp_file = parquet_file.with_suffix(".tmp")
+
+    with ddb.connect() as con:
+        con.register("df", df)
+        con.execute(f"COPY (SELECT * FROM df) TO '{temp_file}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+
+    del df
+
+    temp_file.rename(parquet_file)
+    log.info("[DONE] parquet gravado")
+
+
+@task(retries=2, retry_delay=timedelta(minutes=1))
+def load_table():
+    sentinel = _get_sentinel("load_table")
+
+    if sentinel.exists():
+        log.info("[SKIP] load_table já concluído")
+        return
+
+    parquet_file = _get_parquet_file()
+
+    if not parquet_file.exists():
+        log.info("[SKIP] Nenhum dado para carregar")
+        return
+
+    with ddb.connect() as con:
+        size_mb = (
+            con.execute(
+                f"SELECT SUM(total_uncompressed_size) / (1024*1024.0) FROM parquet_metadata(['{parquet_file}'])"
+            ).fetchone()
+            or (0,)
+        )
+        log.info(f"[START] Carregando parquet ({size_mb[0]:.2f}MB)")
+
+    with ddb.connect() as con:
+        con.execute(f"ATTACH '{DDB_PG_FLAKEFLOW}' AS pg (TYPE POSTGRES);")
+
+        con.execute("CALL postgres_execute('pg', 'TRUNCATE TABLE ferramental.sku')")
+
+        total_rows = (
+            con.execute(
+                f"""
+            INSERT INTO pg.ferramental.sku
+                (log_id, sku, descricao, status, qtdcif, fabrica, ferramenta, qtd_estoque)
+            SELECT
+                log_id::uuid, sku, descricao, status, qtdcif, fabrica, ferramenta, qtd_estoque
+            FROM read_parquet('{parquet_file}')
+        """
+            ).fetchone()
+            or (0,)
+        )
+
+    sentinel.touch()
+    log.info(f"[DONE] ferramental.sku recarregada — {total_rows} registros")
+
+
+@task
+def clear_cache():
+    log.info("[CLEANUP] Limpando parquets e sentinelas.")
+
+    _get_parquet_file().unlink(missing_ok=True)
+    _get_sentinel("load_table").unlink(missing_ok=True)
+
+
+@dag(
+    dag_id="BRONZE_F_SKU",
+    default_args=default_args,
+    schedule="0 7 * * *",
+    catchup=False,
+    max_active_runs=1,
+    tags=["flakeflow", "sku", "bronze"],
+)
+def dag_factory():
+    extract = extract_data()
+    load = load_table()
+    clear = clear_cache()
+
+    _ = extract >> load >> clear
+
+
+dag_factory()

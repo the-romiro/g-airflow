@@ -9,8 +9,8 @@ from global_modules.sharepoint.logs import log_message
 ENG_DATABASE_URL = Variable.get("ENG_DATABASE_URL", None)
 
 type Estabelecimento = Literal["sob", "cra", "for"]
-type ConnectorxVars = Literal["sob", "cra", "for", "pg"]
-type DuckdbVars = Literal["pg"]
+type ConnectorxVars = Literal["sob", "cra", "for", "pg", "flakeflow"]
+type DuckdbVars = Literal["pg", "pg_flakeflow"]
 
 CONNECTIONS_VAR: dict[Estabelecimento, str] = {
     "sob": "elipse_sob",
@@ -24,10 +24,12 @@ CX_CONNECTIONS_VAR: dict[ConnectorxVars, str] = {
     "for": "CX_ELIPSE_FOR",
     "cra": "CX_ELIPSE_CRA",
     "pg": "CX_ELIPSE_PG",
+    "flakeflow": "CX_FLAKEFLOW_CONN",
 }
 
 DUCKDB_CONNECTIONS_VAR: dict[DuckdbVars, str] = {
     "pg": "DDB_PG_CONN",
+    "pg_flakeflow": "DDB_PG_FLAKEFLOW_CONN",
 }
 
 ESTAB_CODE: dict[Estabelecimento, int] = {
