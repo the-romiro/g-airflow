@@ -2,19 +2,19 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-from airflow import DAG
 from airflow.decorators import task
 from sqlalchemy.types import TypeEngine
 
-from deployments.silver.SILVER_F_MELHORIAS_APROVACOES.fields import (
-    DATETIME_WITH_TIMEZONE_FIELDS,
-    EXPAND_FIELDS,
-    LIST_FIELDS,
-)
+from airflow import DAG
 from global_modules.database import exec_merge, get_eng_conn
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.sharepoint.logs import log_message
 from global_modules.sharepoint.sharepoint import fetch_sharepoint_items
+from melhorias.dags.SILVER_F_MELHORIAS_APROVACOES.fields import (
+    DATETIME_WITH_TIMEZONE_FIELDS,
+    EXPAND_FIELDS,
+    LIST_FIELDS,
+)
 
 HERE = Path(__file__).parent
 
