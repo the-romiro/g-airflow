@@ -28,7 +28,7 @@ SELECT --tipo,
   data->'corpo'->>'codGrupoFerramental' AS codGrupoFerramental,
   data->'corpo'->>'descSegmentoNegocio' AS descSegmentoNegocio,
   data->'corpo'->>'descGrupoFerramental' AS descGrupoFerramental
-FROM workflow_logs
+FROM workflow_logs wl
 WHERE 1 = 1
   AND (
     wl.workflow_id = '8b301608-9bc5-4042-9835-7e02d4beec52'
