@@ -104,7 +104,7 @@ def extract_data(estab: Estabelecimento):
         return_type="arrow",
     )
     source_maxima: dict[str, datetime] = {
-        equip: ts
+        str(equip): ts
         for equip, ts in zip(
             source_df["id_equipamento"].to_pylist(),
             source_df["max_ts"].to_pylist(),
