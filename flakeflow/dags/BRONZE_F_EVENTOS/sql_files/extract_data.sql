@@ -1,31 +1,39 @@
 --Tabela Eventos.
-select
-  --tipo,
+SELECT --tipo,
   --data->>'corpo' as Corpo,
-  id as ID_Log,
-  criado_em as Data_Criacao,
-  atualizado_em as Atualizado_Em,
-  data->'corpo'->>'estab' as Estabelecimento,
-  data->'corpo'->>'mercado' as Mercado,
-  data->'corpo'->>'produto' as Produto,
-  (data->'corpo'->>'codEstab')::int2 as CodEstabelecimento,
-  data->'corpo'->>'deposito' as Deposito,
-  data->'corpo'->>'codDeposito'as codDeposito,
-  data->'corpo'->>'codProduto' as codProduto,
-  data->'corpo'->>'descProduto' as descProduto,
-  (data->'corpo'->>'qtdeEliminar')::int4 as qtdeEliminar,
-  data->'corpo'->>'marcaGrendene' as marcaGrendene,
-  data->'corpo'->>'statusProduto' as statusProduto,
-  data->'corpo'->>'valorResidual' as valorResidual,
-  data->'corpo'->>'descFerramenta' as descFerramenta,
-  data->'corpo'->>'numeroProcesso' as numeroProcesso,
-  data->'corpo'->>'tipoFerramenta' as tipoFerramenta,
-  (data->'corpo'->>'qtdeEstoqueAtual')::float4 as qtdeEstoqueAtual,
-  to_date(data->'corpo'->>'dataLimiteAnalise','DD/MM/YYYY') as dataLimiteAnalise,
-  (data->'corpo'->>'segmentoDeNegocio')::int4 as segmentoDeNegocio,
-  data->'corpo'->>'codGrupoFerramental' as codGrupoFerramental,
-  data->'corpo'->>'descSegmentoNegocio' as descSegmentoNegocio,
-  data->'corpo'->>'descGrupoFerramental' as descGrupoFerramental
+  id AS ID_Log,
+  criado_em AS Data_Criacao,
+  atualizado_em AS Atualizado_Em,
+  data->'corpo'->>'estab' AS Estabelecimento,
+  data->'corpo'->>'mercado' AS Mercado,
+  data->'corpo'->>'produto' AS Produto,
+  (data->'corpo'->>'codEstab')::int2 AS CodEstabelecimento,
+  data->'corpo'->>'deposito' AS Deposito,
+  data->'corpo'->>'codDeposito' AS codDeposito,
+  data->'corpo'->>'codProduto' AS codProduto,
+  data->'corpo'->>'descProduto' AS descProduto,
+  (data->'corpo'->>'qtdeEliminar')::int4 AS qtdeEliminar,
+  data->'corpo'->>'marcaGrendene' AS marcaGrendene,
+  data->'corpo'->>'statusProduto' AS statusProduto,
+  data->'corpo'->>'valorResidual' AS valorResidual,
+  data->'corpo'->>'descFerramenta' AS descFerramenta,
+  data->'corpo'->>'numeroProcesso' AS numeroProcesso,
+  data->'corpo'->>'tipoFerramenta' AS tipoFerramenta,
+  (data->'corpo'->>'qtdeEstoqueAtual')::float4 AS qtdeEstoqueAtual,
+  to_date(
+    data->'corpo'->>'dataLimiteAnalise',
+    'DD/MM/YYYY'
+  ) AS dataLimiteAnalise,
+  (data->'corpo'->>'segmentoDeNegocio')::int4 AS segmentoDeNegocio,
+  data->'corpo'->>'codGrupoFerramental' AS codGrupoFerramental,
+  data->'corpo'->>'descSegmentoNegocio' AS descSegmentoNegocio,
+  data->'corpo'->>'descGrupoFerramental' AS descGrupoFerramental
 FROM workflow_logs
-where workflow_id = '8b301608-9bc5-4042-9835-7e02d4beec52' and data is not null and tipo = 'WEB_HOOK' and data->'corpo'->>'estab' is not null
-
+WHERE 1 = 1
+  AND (
+    wl.workflow_id = '8b301608-9bc5-4042-9835-7e02d4beec52'
+    OR wl.workflow_id = '395ecda5-ab4f-442f-8115-196752a8a33e'
+  )
+  AND data IS NOT NULL
+  AND tipo = 'WEB_HOOK'
+  AND data->'corpo'->>'estab' IS NOT NULL

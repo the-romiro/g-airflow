@@ -1,15 +1,18 @@
 --Tabela ProdutosRelacionados
-SELECT
-    l.id as log_id,
-    sku->>'estab' as estabelecimento,
-    sku->>'produto' as produto,
-    sku->>'codProduto' as codProduto,
-    sku->>'descProduto' as descProduto,
-    sku->>'desMarcaGrendene' as desMarcaGrendene,
-    sku->>'ultimoLancamento' as ultimoLancamento,
-    sku->>'descricaoComponente' as descricaoComponente
+SELECT l.id AS log_id,
+  sku->>'estab' AS estabelecimento,
+  sku->>'produto' AS produto,
+  sku->>'codProduto' AS codProduto,
+  sku->>'descProduto' AS descProduto,
+  sku->>'desMarcaGrendene' AS desMarcaGrendene,
+  sku->>'ultimoLancamento' AS ultimoLancamento,
+  sku->>'descricaoComponente' AS descricaoComponente
 FROM workflow_logs l
-CROSS JOIN LATERAL jsonb_array_elements(l.data->'corpo'->'produtosRelacionados') sku
-WHERE workflow_id = '8b301608-9bc5-4042-9835-7e02d4beec52'
-AND tipo = 'WEB_HOOK'
-AND l.data->'corpo' ? 'produtosRelacionados'
+  CROSS JOIN LATERAL jsonb_array_elements(l.data->'corpo'->'produtosRelacionados') sku
+WHERE 1 = 1
+  AND (
+    wl.workflow_id = '8b301608-9bc5-4042-9835-7e02d4beec52'
+    OR wl.workflow_id = '395ecda5-ab4f-442f-8115-196752a8a33e'
+  )
+  AND tipo = 'WEB_HOOK'
+  AND l.data->'corpo' ? 'produtosRelacionados'
