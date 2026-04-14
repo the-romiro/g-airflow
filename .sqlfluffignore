@@ -1,0 +1,8 @@
+.venv/
+node_modules/
+*.csv
+*.parquet
+
+# Limitação do parser do sqlfluff — ainda não suporta a sintaxe MERGE do PG 17+
+simon/silver/SILVER_F_ELIPSE_CICLOS/sql_files/merge_query.sql
+
