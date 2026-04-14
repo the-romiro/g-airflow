@@ -6,12 +6,14 @@ import duckdb as ddb
 from airflow.decorators import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
+from sqlalchemy import text
 
 from global_modules.database import (
     Estabelecimento,
     get_ciclos_search_window,
     get_cx_conn,
     get_duckdb_conn,
+    get_eng_conn,
     get_estab_code,
 )
 from global_modules.ms_teams import notify_teams_on_failure
@@ -228,6 +230,45 @@ def copy_to_stage():
 
 
 @task
+def ensure_partition():
+    d = datetime.now() + timedelta(days=30)  # Sempre criar 1 partição a frente.
+    year, month = d.year, d.month
+
+    if month == 12:
+        next_year, next_month = year + 1, 1
+    else:
+        next_year, next_month = year, month + 1
+
+    partition_name = f"oee_fciclos_{year}_{month:02d}"
+
+    create_partition = (
+        f"CREATE TABLE IF NOT EXISTS silver.{partition_name} "
+        f"PARTITION OF silver.oee_fciclos "
+        f"FOR VALUES FROM ('{year}-{month:02d}-01') TO ('{next_year}-{next_month:02d}-01')"
+    )
+
+    create_index = (
+        f"CREATE INDEX IF NOT EXISTS idx_brin_data_{year}_{month:02d} "
+        f"ON silver.{partition_name} "
+        f"USING BRIN (data_hora) "
+        f"WITH (pages_per_range = 32)"
+    )
+
+    pg_con_str = get_duckdb_conn("pg")
+
+    with ddb.connect() as con:
+        con.execute(f"ATTACH '{pg_con_str}' AS pg (TYPE POSTGRES);")
+
+        log.info(f"[INFO] Criando partição: \n {create_partition}")
+        con.execute(f"CALL postgres_execute('pg', $${create_partition}$$)")
+        log.info(f"[DONE] Partição silver.{partition_name}.")
+
+        log.info(f"[INFO] Criando índice: \n {create_index}")
+        con.execute(f"CALL postgres_execute('pg', $${create_index}$$)")
+        log.info(f"[DONE] Índice BRIN idx_brin_data_{year}_{month:02d}.")
+
+
+@task
 def clear_cache():
     log.info("[CLEANUP] Limpando parquets e sentinelas.")
 
@@ -240,7 +281,7 @@ def clear_cache():
 @dag(
     dag_id="SILVER_F_CICLOS_SIMON",
     default_args=default_args,
-    schedule="25 9,18 * * *",
+    schedule="30 9,18 * * *",
     catchup=False,
     max_active_runs=1,
     concurrency=3,
@@ -253,6 +294,7 @@ def dag_factory():
 
     merge_parquet = merge_parquets()
     copy = copy_to_stage()
+    partition = ensure_partition()
 
     merge_table = SQLExecuteQueryOperator(
         task_id="merge_stage_to_silver",
@@ -269,7 +311,15 @@ def dag_factory():
 
     clear = clear_cache()
 
-    _ = [sob_data, for_data, cra_data] >> merge_parquet >> copy >> merge_table >> truncate >> clear
+    _ = (
+        [sob_data, for_data, cra_data]
+        >> merge_parquet
+        >> copy
+        >> partition
+        >> merge_table
+        >> truncate
+        >> clear
+    )
 
 
 dag_factory()
