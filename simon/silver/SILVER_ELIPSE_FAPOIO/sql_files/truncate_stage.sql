@@ -1,1 +1,1 @@
-truncate table elipse.stage.stage_apoio;
+TRUNCATE TABLE elipse.stage.stage_apoio;

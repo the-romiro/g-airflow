@@ -21,7 +21,13 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["taskipy", "ruff", "pytest", "pytest-cov"]
+dev = [
+    "taskipy",
+    "ruff",
+    "pytest",
+    "pytest-cov",
+    "sqlfluff>=4.1.0",
+]
 
 [tool.taskipy.tasks]
 lint = "uv run ruff check"

@@ -1,5 +1,5 @@
-with 
-cte_identificacao_setup_estratificado as (
+-- sqlfluff:dialect:postgres
+with cte_identificacao_setup_estratificado as (
 	select distinct
 		p.id_grupo,
 		max(tp.tipo_setup) as tipo_setup
@@ -11,7 +11,7 @@ cte_identificacao_setup_estratificado as (
 	group by p.id_grupo
 ),
 cte_disponibilidade as (
-	select 
+	select
 		id_estabelecimento,
 		id,
 		maquina_id,
@@ -46,11 +46,11 @@ select
 	cm.descricao,
 	cfa.descricao as familia,
 	cfaa.descricao as familia_agrupada,
-	case 
+	case
 		when cm.descricao like '%Aguardando%' and cfaa.descricao = 'Matrizaria' then 'Aguardando Matrizaria'
-		when cm.descricao not like '%Aguardando%' and cfaa.descricao = 'Matrizaria' then 'Reparo Matrizaria' 
+		when cm.descricao not like '%Aguardando%' and cfaa.descricao = 'Matrizaria' then 'Reparo Matrizaria'
 		when cm.descricao like '%Aguardando%' and cfaa.descricao = 'Manutenção' then 'Aguardando Manutenção'
-		when cm.descricao not like '%Aguardando%' and cfaa.descricao = 'Manutenção' then 'Reparo Manutenção' 
+		when cm.descricao not like '%Aguardando%' and cfaa.descricao = 'Manutenção' then 'Reparo Manutenção'
 	end as tipo,
 	p.status,
 	p.turno,
@@ -58,7 +58,7 @@ select
 	p.id_grupo,
 	case
 		when ids.tipo_setup is null then
-			case 
+			case
 				when p.id_estabelecimento = 20 then
 					case  p.codigo
 						when 100 then 'Setup de Cor'
@@ -81,7 +81,7 @@ select
 						when 126 then 'Troca de Numeração'
 						when 149 then 'Troca de Produto'
 						when 184 then 'Setup de Cor - Glitter'
-						when 422 then 'Deslocamento de Equipe'	
+						when 422 then 'Deslocamento de Equipe'
 						when 125 then 'Troca de Layout'
 					end
 				when p.id_estabelecimento = 40 then
@@ -93,9 +93,9 @@ select
 						when 149 then 'Troca de Produto'
 						when 150 then 'Troca de Grade'
 						when 402 then 'Troca de Coleção'
-						when 422 then 'Deslocamento de Equipe'	
-					end		
-			end 
+						when 422 then 'Deslocamento de Equipe'
+					end
+			end
 		else ids.tipo_setup
 	end as tipo_setup,
 	maq.id as id_equipamento,
@@ -122,14 +122,14 @@ on p.codigo = cm.codigo and p.id_estabelecimento = cm.id_estabelecimento
 inner join elipse.silver.cadastros_familias cfa
 on cm.id_familia = cfa.id and cfa.id_estabelecimento = cm.id_estabelecimento
 left join elipse.silver.cadastros_familias_agrupadas cfaa
-on cfa.id_familia_agrupada = cfaa.id 
+on cfa.id_familia_agrupada = cfaa.id
 left join cte_identificacao_setup_estratificado ids
 on ids.id_grupo = p.id_grupo
 where p.data_hora_inicio >= CURRENT_DATE - INTERVAL '90 days'
 or p.data_hora_fim >= CURRENT_DATE - INTERVAL '90 days'
 ),
 cte_paradas_final as (
-select 
+select
 	id_estabelecimento,
 	id_parada,
 	data_hora_inicio,
@@ -139,14 +139,14 @@ select
 	descricao,
 	numero_produto,
 	familia,
-	case 
+	case
 		when tipo_setup is not null then 'Setup' else familia_agrupada
 	end as familia_agrupada,
 	tipo,
 	status,
 	turno,
 	peso_oee,
-	case 
+	case
 		when id_grupo is null and tipo_setup is not null then left(md5(id_estabelecimento::TEXT || id_parada::TEXT || id_equipamento::TEXT), 8) else id_grupo::text
 	end as id_grupo,
 	tipo_setup,
