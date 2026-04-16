@@ -25,8 +25,10 @@ dev = ["taskipy", "ruff", "pytest", "pytest-cov", "sqlfluff>=4.1.0"]
 
 [tool.taskipy.tasks]
 lint = "uv run ruff check"
+lint-sql = "uv run sqlfluff lint dags/"
 pre_format = "uv run ruff check --fix"
 format = "uv run ruff format"
+format-sql = "uv run sqlfluff format dags/"
 run = "uv run task docker"
 pre_test = "uv run task lint"
 test = "uv run pytest -s -x --cov=./ -vv"

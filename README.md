@@ -1,6 +1,6 @@
 # Airflow Data Pipeline — SiMOn
 
-Pipeline de dados para o sistema **SiMOn** (Sistema de Monitoramento Online), responsável por consolidar dados de qualidade, disponibilidade e performance das fábricas a partir do sistema Elipse e outras fontes, entregando indicadores OEE nas camadas Silver e Gold.
+Pipeline de dados da equipe de dados responsável por consolidar indicadores de qualidade, disponibilidade e performance das fábricas. Alimenta o **SiMOn** (Sistema de Monitoramento Online) e outros sistemas a partir de múltiplas fontes — Elipse, Flakeflow e SharePoint — entregando os dados tratados nas camadas Silver e Gold.
 
 ## Visão Geral da Arquitetura
 
@@ -46,58 +46,56 @@ O pipeline segue a arquitetura medallion:
 
 - Docker e Docker Compose
 - [uv](https://docs.astral.sh/uv/) instalado
-- Variável de ambiente `AIRFLOW_UID` configurada (Linux):
-  ```bash
-  echo -e "AIRFLOW_UID=$(id -u)" > .env
-  ```
 
 ## Instalação e Execução
 
-**Instalar dependências de desenvolvimento:**
+**1. Copiar e preencher as variáveis de ambiente:**
+
+```bash
+cp .env.example .env
+```
+
+Edite o `.env` ajustando ao menos:
+
+| Variável | Descrição |
+|---|---|
+| `AIRFLOW_UID` | UID do usuário Linux (`id -u`); evita arquivos criados como root |
+| `DRIVER_PATH` | Caminho do volume onde os parquets de extração são gravados |
+| `DOCKER_REGISTRY` | Registry privado para push/pull da imagem (ex: `10.2.24.20:5000/`) |
+| `SHAREPOINT_USERNAME` | Usuário de serviço para acesso ao SharePoint |
+| `SHAREPOINT_USER_PASSWORD` | Senha do usuário de serviço SharePoint |
+
+**2. Instalar dependências de desenvolvimento:**
 
 ```bash
 uv sync --group dev
 ```
 
-**Subir o ambiente completo (detached):**
+**3. Subir o ambiente:**
 
 ```bash
-uv run task docker
-```
-
-**Subir com watch (rebuild automático em mudanças de arquivo):**
-
-```bash
-uv run task dw
+uv run task docker   # detached
+uv run task dw       # com watch — rebuild automático em mudanças de arquivo
 ```
 
 O Airflow ficará disponível em `http://localhost:8080` (usuário/senha padrão: `airflow/airflow`).
 
-**Build manual da imagem:**
-
-```bash
-uv run task build
-```
-
 ## Comandos de Desenvolvimento
 
 ```bash
-uv run task lint        # Verificação de estilo (ruff)
-uv run task format      # Correção automática + formatação (ruff)
-uv run task test        # Testes com cobertura (pytest); roda lint antes
+uv run task lint         # Verificação de estilo Python (ruff check)
+uv run task format       # Correção automática + formatação Python (ruff)
+uv run task lint-sql     # Verificação de estilo SQL (sqlfluff lint dags/)
+uv run task format-sql   # Formatação SQL (sqlfluff format dags/)
+uv run task test         # Testes com cobertura (pytest); roda lint antes; gera htmlcov/
+uv run task build        # Build da imagem Docker
+uv run task push         # Build + push para o registry
 ```
 
 **Rodar um único arquivo de teste:**
 
 ```bash
 uv run pytest -s -x -vv path/to/test_file.py
-```
-
-**Linting SQL:**
-
-```bash
-uv run sqlfluff lint dags/
-uv run sqlfluff fix dags/
 ```
 
 ## Estrutura do Projeto
