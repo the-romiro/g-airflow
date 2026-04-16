@@ -1,5 +1,5 @@
 [project]
-name = "dags"
+name = "airflow"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
@@ -21,29 +21,22 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "taskipy",
-    "ruff",
-    "pytest",
-    "pytest-cov",
-    "sqlfluff>=4.1.0",
-]
+dev = ["taskipy", "ruff", "pytest", "pytest-cov", "sqlfluff>=4.1.0"]
 
 [tool.taskipy.tasks]
 lint = "uv run ruff check"
 pre_format = "uv run ruff check --fix"
 format = "uv run ruff format"
-run = "cd ../airflow-gre && task docker"
+run = "uv run task docker"
 pre_test = "uv run task lint"
 test = "uv run pytest -s -x --cov=./ -vv"
 post_test = "uv run coverage html"
-build = "cd ../airflow-gre && task build"
-pre_push = "cd ../airflow-gre && task build"
-push = "cd ../airflow-gre && task push"
-pre_dw = "cd ../airflow-gre && task build"
-dw = "cd ../airflow-gre && docker compose up --watch"
-docker = "cd ../airflow-gre && docker compose up -d"
-compose_down = "cd ../airflow-gre && docker compose down"
+build = "docker build -t ${DOCKER_REGISTRY:-}airflow-gre:2.10.5 ."
+pre_push = "uv run task build"
+push = "docker push ${DOCKER_REGISTRY:-}airflow-gre:2.10.5"
+pre_dw = "uv run task build"
+dw = "docker compose up --watch"
+docker = "docker compose up -d"
 
 [tool.black]
 color = true

@@ -1,10 +1,14 @@
+.venv
+.env*
+
+dags/
+config/
+plugins/
 datalake/
 logs/
 
 .claude
-
-# Created by https://www.toptal.com/developers/gitignore/api/python
-# Edit at https://www.toptal.com/developers/gitignore?templates=python
+CLAUDE.md
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

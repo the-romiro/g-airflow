@@ -109,6 +109,65 @@ wheels = [
 ]
 
 [[package]]
+name = "airflow"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "apache-airflow" },
+    { name = "apache-airflow-providers-microsoft-mssql" },
+    { name = "apache-airflow-providers-postgres" },
+    { name = "connectorx" },
+    { name = "duckdb" },
+    { name = "office365-rest-python-client" },
+    { name = "pandas" },
+    { name = "polars" },
+    { name = "psycopg2-binary" },
+    { name = "pyarrow" },
+    { name = "pyodbc" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+    { name = "sqlalchemy" },
+    { name = "xlsxwriter" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "sqlfluff" },
+    { name = "taskipy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "apache-airflow", specifier = "==2.10.5" },
+    { name = "apache-airflow-providers-microsoft-mssql", specifier = ">=4.3.3" },
+    { name = "apache-airflow-providers-postgres", specifier = ">=6.0.0" },
+    { name = "connectorx", specifier = ">=0.4.5" },
+    { name = "duckdb", specifier = ">=1.5.1" },
+    { name = "office365-rest-python-client", specifier = ">=2.6.2" },
+    { name = "pandas", specifier = ">=2.1.4" },
+    { name = "polars", specifier = ">=1.28.1" },
+    { name = "psycopg2-binary", specifier = ">=2.9.11" },
+    { name = "pyarrow", specifier = ">=23.0.1" },
+    { name = "pyodbc", specifier = ">=5.3.0" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "requests", specifier = ">=2.33.1" },
+    { name = "sqlalchemy", specifier = ">=1.4.54" },
+    { name = "xlsxwriter", specifier = ">=3.2.9" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "sqlfluff", specifier = ">=4.1.0" },
+    { name = "taskipy" },
+]
+
+[[package]]
 name = "alembic"
 version = "1.18.4"
 source = { registry = "https://pypi.org/simple" }
@@ -853,65 +912,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/44/46/466269e833f1c4718d6cd496ffe20c56c9c8d013486ff66b4f69c302a68d/cryptography-46.0.6-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:6617f67b1606dfd9fe4dbfa354a9508d4a6d37afe30306fe6c101b7ce3274b72", size = 4659255, upload-time = "2026-03-25T23:34:33.679Z" },
     { url = "https://files.pythonhosted.org/packages/0a/09/ddc5f630cc32287d2c953fc5d32705e63ec73e37308e5120955316f53827/cryptography-46.0.6-cp38-abi3-win32.whl", hash = "sha256:7f6690b6c55e9c5332c0b59b9c8a3fb232ebf059094c17f9019a51e9827df91c", size = 3010660, upload-time = "2026-03-25T23:34:35.418Z" },
     { url = "https://files.pythonhosted.org/packages/1b/82/ca4893968aeb2709aacfb57a30dec6fa2ab25b10fa9f064b8882ce33f599/cryptography-46.0.6-cp38-abi3-win_amd64.whl", hash = "sha256:79e865c642cfc5c0b3eb12af83c35c5aeff4fa5c672dc28c43721c2c9fdd2f0f", size = 3471160, upload-time = "2026-03-25T23:34:37.191Z" },
-]
-
-[[package]]
-name = "dags"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "apache-airflow" },
-    { name = "apache-airflow-providers-microsoft-mssql" },
-    { name = "apache-airflow-providers-postgres" },
-    { name = "connectorx" },
-    { name = "duckdb" },
-    { name = "office365-rest-python-client" },
-    { name = "pandas" },
-    { name = "polars" },
-    { name = "psycopg2-binary" },
-    { name = "pyarrow" },
-    { name = "pyodbc" },
-    { name = "python-dotenv" },
-    { name = "requests" },
-    { name = "sqlalchemy" },
-    { name = "xlsxwriter" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "sqlfluff" },
-    { name = "taskipy" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "apache-airflow", specifier = "==2.10.5" },
-    { name = "apache-airflow-providers-microsoft-mssql", specifier = ">=4.3.3" },
-    { name = "apache-airflow-providers-postgres", specifier = ">=6.0.0" },
-    { name = "connectorx", specifier = ">=0.4.5" },
-    { name = "duckdb", specifier = ">=1.5.1" },
-    { name = "office365-rest-python-client", specifier = ">=2.6.2" },
-    { name = "pandas", specifier = ">=2.1.4" },
-    { name = "polars", specifier = ">=1.28.1" },
-    { name = "psycopg2-binary", specifier = ">=2.9.11" },
-    { name = "pyarrow", specifier = ">=23.0.1" },
-    { name = "pyodbc", specifier = ">=5.3.0" },
-    { name = "python-dotenv", specifier = ">=1.2.2" },
-    { name = "requests", specifier = ">=2.33.1" },
-    { name = "sqlalchemy", specifier = ">=1.4.54" },
-    { name = "xlsxwriter", specifier = ">=3.2.9" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "sqlfluff", specifier = ">=4.1.0" },
-    { name = "taskipy" },
 ]
 
 [[package]]
