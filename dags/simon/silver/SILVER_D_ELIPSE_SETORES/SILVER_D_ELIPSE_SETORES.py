@@ -3,8 +3,11 @@ from pathlib import Path
 
 import connectorx as cx
 import duckdb as ddb
+from airflow.datasets import Dataset
 from airflow.decorators import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+
+DS_CADASTROS_SETORES = Dataset("elipse://silver/cadastros_setores")
 from airflow.utils.log.logging_mixin import LoggingMixin
 
 from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
@@ -142,6 +145,7 @@ def dag_factory():
         task_id="merge_table_and_drop_temp",
         conn_id="postgres_eng_server",
         sql=read_sql_file("merge_query.sql", __file__),
+        outlets=[DS_CADASTROS_SETORES],
     )
 
     clear = clear_cache()
