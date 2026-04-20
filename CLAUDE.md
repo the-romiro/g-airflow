@@ -9,6 +9,8 @@ All tasks are run via [taskipy](https://github.com/taskipy/taskipy) through `uv`
 ```bash
 uv run task lint        # ruff check
 uv run task format      # ruff check --fix && ruff format
+uv run task lint-sql    # sqlfluff lint dags/
+uv run task format-sql  # sqlfluff format dags/
 uv run task test        # pytest -s -x --cov=./ -vv (runs lint first; generates htmlcov/)
 uv run task docker      # docker compose up -d (detached)
 uv run task dw          # docker compose up --watch (rebuilds on file change; runs build first)
@@ -19,12 +21,6 @@ uv run task push        # build + docker push
 Run a single test file:
 ```bash
 uv run pytest -s -x -vv path/to/test_file.py
-```
-
-SQL linting:
-```bash
-uv run sqlfluff lint dags/
-uv run sqlfluff fix dags/
 ```
 
 ## Architecture

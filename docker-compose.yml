@@ -98,6 +98,9 @@ x-airflow-common: &airflow-common
       limits:
         cpus: "4"
         memory: "1.5GB"
+      reservations:
+        cpus: "0.5"
+        memory: "512m"
 
 services:
   postgres:
@@ -119,6 +122,9 @@ services:
         limits:
           cpus: "4"
           memory: "1GB"
+        reservations:
+          cpus: "0.5"
+          memory: "256m"
 
   redis:
     # Redis is limited to 7.2-bookworm due to licencing change
@@ -138,6 +144,9 @@ services:
         limits:
           cpus: "4"
           memory: "0.5GB"
+        reservations:
+          cpus: "0.25"
+          memory: "128m"
 
   airflow-webserver:
     <<: *airflow-common
@@ -175,6 +184,9 @@ services:
         limits:
           cpus: "3"
           memory: "1GB"
+        reservations:
+          cpus: "0.5"
+          memory: "256m"
 
   airflow-worker:
     <<: *airflow-common
@@ -203,6 +215,9 @@ services:
         limits:
           cpus: "4"
           memory: "5GB"
+        reservations:
+          cpus: "1"
+          memory: "1GB"
 
   airflow-triggerer:
     <<: *airflow-common
@@ -227,6 +242,9 @@ services:
         limits:
           cpus: "2"
           memory: "0.5GB"
+        reservations:
+          cpus: "0.25"
+          memory: "128m"
 
   airflow-init:
     <<: *airflow-common
