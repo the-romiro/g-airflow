@@ -33,12 +33,21 @@ default_args = {
     tags=["elipse", "self_service", "gold"],
 )
 def dag_factory():
-    SQLExecuteQueryOperator(
+    merge = SQLExecuteQueryOperator(
         task_id="merge_stage_silver",
         conn_id="postgres_eng_server",
         sql=read_sql_file("merge_gold_dElipse_Maquinas.sql", __file__),
         autocommit=True,
     )
+
+    vacuum_analyze = SQLExecuteQueryOperator(
+        task_id="vacuum_analyze_task",
+        sql="VACUUM ANALYZE elipse.gold.cadastros_maquinas;",
+        conn_id="postgres_eng_server",
+        autocommit=True,
+    )
+
+    _ = merge >> vacuum_analyze
 
 
 dag_factory()

@@ -26,17 +26,11 @@ with DAG(
         conn_id="postgres_eng_server",
         sql="./sql_files/transform_performance.sql",
     )
-    vacuum_task = SQLExecuteQueryOperator(
-        task_id="vacuum_task",
-        sql="VACUUM elipse.gold.oee_fperformance;",
-        conn_id="postgres_eng_server",
-        autocommit=True,  # Isso desabilita a transação para permitir o VACUUM
-    )
-    analyze_task = SQLExecuteQueryOperator(
-        task_id="analyze_task",
-        sql="ANALYZE elipse.gold.oee_fperformance;",
+    vacuum_analyze_task = SQLExecuteQueryOperator(
+        task_id="vacuum_analyze_task",
+        sql="VACUUM ANALYZE elipse.gold.oee_fperformance;",
         conn_id="postgres_eng_server",
         autocommit=True,
     )
 
-_ = vacuum_task >> analyze_task >> transform_data
+_ = transform_data >> vacuum_analyze_task

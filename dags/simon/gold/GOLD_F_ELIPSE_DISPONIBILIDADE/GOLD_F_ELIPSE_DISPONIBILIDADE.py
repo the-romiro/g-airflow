@@ -29,27 +29,20 @@ default_args = {
     tags=["elipse", "self_service", "disponibilidade", "gold"],
 )
 def dag_factory():
-    vacuum = SQLExecuteQueryOperator(
-        task_id="vacuum_task",
-        sql="VACUUM elipse.gold.oee_fparadas;",
-        conn_id="postgres_eng_server",
-        autocommit=True,
-    )
-
-    analyze = SQLExecuteQueryOperator(
-        task_id="analyze_task",
-        sql="ANALYZE elipse.gold.oee_fparadas;",
-        conn_id="postgres_eng_server",
-        autocommit=True,
-    )
-
     transform = SQLExecuteQueryOperator(
         task_id="transform_silver_into_gold",
         conn_id="postgres_eng_server",
         sql=read_sql_file("transform_query.sql", __file__),
     )
 
-    _ = vacuum >> analyze >> transform
+    vacuum_analyze = SQLExecuteQueryOperator(
+        task_id="vacuum_analyze_task",
+        sql="VACUUM ANALYZE elipse.gold.oee_fparadas;",
+        conn_id="postgres_eng_server",
+        autocommit=True,
+    )
+
+    _ = transform >> vacuum_analyze
 
 
 dag_factory()
