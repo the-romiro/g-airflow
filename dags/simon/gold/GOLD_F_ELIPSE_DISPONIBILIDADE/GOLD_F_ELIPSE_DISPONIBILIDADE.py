@@ -1,11 +1,16 @@
 from datetime import datetime, timedelta
 
-from airflow.datasets import Dataset
-from airflow.decorators import dag
-from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
-
+import duckdb as ddb
+from global_modules.database import get_duckdb_conn
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.utils import read_sql_file
+
+from airflow.datasets import Dataset
+from airflow.decorators import dag, task
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+from airflow.utils.log.logging_mixin import LoggingMixin
+
+log = LoggingMixin().log
 
 gold_dataset = Dataset("elipse://gold/f_disponibilidade_simon")
 
@@ -20,6 +25,34 @@ default_args = {
 }
 
 
+@task
+def ensure_partition():
+    d = datetime.now() + timedelta(days=30)
+    year, month = d.year, d.month
+
+    if month == 12:
+        next_year, next_month = year + 1, 1
+    else:
+        next_year, next_month = year, month + 1
+
+    partition_name = f"oee_fparadas_p_{year}_{month:02d}"
+
+    create_partition = (
+        f"CREATE TABLE IF NOT EXISTS gold.{partition_name} "
+        f"PARTITION OF gold.oee_fparadas "
+        f"FOR VALUES FROM ('{year}-{month:02d}-01') TO ('{next_year}-{next_month:02d}-01')"
+    )
+
+    pg_con_str = get_duckdb_conn("pg")
+
+    with ddb.connect() as con:
+        con.execute(f"ATTACH '{pg_con_str}' AS pg (TYPE POSTGRES);")
+
+        log.info(f"[INFO] Criando partição: \n {create_partition}")
+        con.execute(f"CALL postgres_execute('pg', $${create_partition}$$)")
+        log.info(f"[DONE] Partição gold.{partition_name}.")
+
+
 @dag(
     dag_id="GOLD_F_DISPONIBILIDADE_SIMON",
     default_args=default_args,
@@ -29,6 +62,8 @@ default_args = {
     tags=["elipse", "self_service", "disponibilidade", "gold"],
 )
 def dag_factory():
+    partition = ensure_partition()
+
     transform = SQLExecuteQueryOperator(
         task_id="transform_silver_into_gold",
         conn_id="postgres_eng_server",
@@ -42,7 +77,7 @@ def dag_factory():
         autocommit=True,
     )
 
-    _ = transform >> vacuum_analyze
+    _ = partition >> transform >> vacuum_analyze
 
 
 dag_factory()
