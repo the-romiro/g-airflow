@@ -109,13 +109,18 @@ def _parse_bool_series(series: pd.Series) -> pd.Series:
     return series.map(_cast).astype("boolean")
 
 
-def _parse_dt_with_tz(series: pd.Series) -> pd.Series:
+def _parse_dt_with(series: pd.Series, tz=False) -> pd.Series:
     formats = ["%d/%m/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S"]
     parsed = pd.to_datetime(series, utc=True, errors="coerce")
     if parsed.isna().any():
         for fmt in formats:
-            fallback = pd.to_datetime(series, format=fmt, errors="coerce").dt.tz_localize("UTC")
+            if tz:
+                fallback = pd.to_datetime(series, format=fmt, errors="coerce").dt.tz_localize("UTC")
+            else:
+                fallback = pd.to_datetime(series, format=fmt, errors="coerce")
+
             parsed = parsed.fillna(fallback)
+
     return parsed
 
 
@@ -142,10 +147,10 @@ def parse_by_schema(
             df[col] = pd.to_numeric(df[col], errors="coerce")
         elif isinstance(col_type, sa_types.DateTime):
             if col_type.timezone:
-                df[col] = _parse_dt_with_tz(df[col])
+                df[col] = _parse_dt_with(df[col], tz=True)
             else:
-                df[col] = pd.to_datetime(df[col], errors="coerce")
+                df[col] = _parse_dt_with(df[col], tz=False)
         elif isinstance(col_type, sa_types.Date):
-            df[col] = pd.to_datetime(df[col], errors="coerce")
+            df[col] = _parse_dt_with(df[col], tz=False)
 
     return df
