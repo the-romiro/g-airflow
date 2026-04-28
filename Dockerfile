@@ -33,4 +33,5 @@ RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
   pyodbc \
   office365-rest-python-client \
   duckdb \
-  connectorx
+  connectorx && \
+  python -c "import duckdb; con = duckdb.connect(); con.execute('INSTALL mssql FROM community'); con.close()"

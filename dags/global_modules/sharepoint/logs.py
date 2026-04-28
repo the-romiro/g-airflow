@@ -1,7 +1,7 @@
-import logging
+from airflow.utils.log.logging_mixin import LoggingMixin
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
+log = LoggingMixin().log
 
 
 def log_message(message: str):
-    logging.info(message)
+    log.info(message)

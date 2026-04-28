@@ -1,17 +1,16 @@
 from functools import cache
 from typing import Literal
 
+from airflow.models import Variable
 from global_modules.sharepoint.logs import log_message
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-
-from airflow.models import Variable
 
 ENG_DATABASE_URL = Variable.get("ENG_DATABASE_URL", None)
 
 type Estabelecimento = Literal["sob", "cra", "for"]
 type ConnectorxVars = Literal["sob", "cra", "for", "pg", "flakeflow"]
-type DuckdbVars = Literal["pg", "pg_flakeflow"]
+type DuckdbVars = Literal["pg", "pg_flakeflow", "dbengenharia"]
 
 CONNECTIONS_VAR: dict[Estabelecimento, str] = {
     "sob": "elipse_sob",
@@ -31,6 +30,7 @@ CX_CONNECTIONS_VAR: dict[ConnectorxVars, str] = {
 DUCKDB_CONNECTIONS_VAR: dict[DuckdbVars, str] = {
     "pg": "DDB_PG_CONN",
     "pg_flakeflow": "DDB_PG_FLAKEFLOW_CONN",
+    "dbengenharia": "DDB_DB_ENGENHARIA_CONN",
 }
 
 ESTAB_CODE: dict[Estabelecimento, int] = {
@@ -53,11 +53,15 @@ def get_estab_code(estab: Estabelecimento):
     return ESTAB_CODE[estab]
 
 
-def get_elipse_conn(estab: Estabelecimento, fast_executemany=False) -> Engine:
+def get_elipse_conn(
+    estab: Estabelecimento,
+    fast_executemany=False,
+    use_setinputsizes=False,
+) -> Engine:
     string_conn = _get_var(CONNECTIONS_VAR[estab])
 
     return create_engine(
-        string_conn, fast_executemany=fast_executemany
+        string_conn, fast_executemany=fast_executemany, use_setinputsizes=use_setinputsizes
     )  # pyright: ignore[reportReturnType]
 
 
@@ -73,12 +77,14 @@ def get_duckdb_conn(conn: DuckdbVars):
     return string_conn
 
 
-def get_eng_conn(fast_executemany=False) -> Engine:
+def get_eng_conn(fast_executemany=False, use_setinputsizes=True) -> Engine:
     if ENG_DATABASE_URL is None:
         raise ValueError("Variável do airflow 'ENG_DATABASE_URL' não foi definida.")
 
     return create_engine(
-        ENG_DATABASE_URL, fast_executemany=fast_executemany
+        ENG_DATABASE_URL,
+        fast_executemany=fast_executemany,
+        use_setinputsizes=use_setinputsizes,
     )  # pyright: ignore[reportReturnType]
 
 
