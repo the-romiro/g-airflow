@@ -3,9 +3,10 @@ import pandas as pd
 from office365.sharepoint.lists.list import List
 from sqlalchemy import types as sa_types
 
-EXCLUDE_FIELDS = "Attachments,ItemChildCount,FolderChildCount,DocIcon,LinkTitle,LinkTitleNoMenu,Edit,ContentType,AppEditor,AppAuthor".split(
-    ","
-)
+EXCLUDE_FIELDS = (
+    "Attachments,ItemChildCount,FolderChildCount,DocIcon,LinkTitle,"
+    "LinkTitleNoMenu,Edit,ContentType,AppEditor,AppAuthor"
+).split(",")
 
 
 def get_columns(sp_list: List):
@@ -32,7 +33,7 @@ def get_columns(sp_list: List):
             "type": f.type_as_string,
         }  # type: ignore
 
-        if f.type_as_string in ["Lookup", "User"]:
+        if f.type_as_string in {"Lookup", "User"}:
             field["select"] += "/Id"
             expand_fields.append(field)
 
@@ -93,5 +94,58 @@ def parse_number(
 
         if isinstance(col_type, sa_types.Float):
             df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df
+
+
+def _parse_bool_series(series: pd.Series) -> pd.Series:
+    def _cast(v):
+        if pd.isna(v) or v in {"nan", "None", ""}:
+            return pd.NA
+        if isinstance(v, bool):
+            return v
+        return str(v).lower() in {"true", "1"}
+
+    return series.map(_cast).astype("boolean")
+
+
+def _parse_dt_with_tz(series: pd.Series) -> pd.Series:
+    formats = ["%d/%m/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S"]
+    parsed = pd.to_datetime(series, utc=True, errors="coerce")
+    if parsed.isna().any():
+        for fmt in formats:
+            fallback = pd.to_datetime(series, format=fmt, errors="coerce").dt.tz_localize("UTC")
+            parsed = parsed.fillna(fallback)
+    return parsed
+
+
+def parse_by_schema(
+    df: pd.DataFrame,
+    schema: dict[str, sa_types.TypeEngine],
+) -> pd.DataFrame:
+    """Converte colunas do DataFrame conforme os tipos SQLAlchemy definidos em `schema`."""
+    df = df.copy()
+    df = df.replace(["nan", "None"], np.nan)
+
+    for col, col_type in schema.items():
+        if col not in df.columns:
+            continue
+
+        if isinstance(col_type, type):
+            col_type = col_type()  # noqa: PLW2901
+
+        if isinstance(col_type, sa_types.Boolean):
+            df[col] = _parse_bool_series(df[col])
+        elif isinstance(col_type, sa_types.Integer):
+            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+        elif isinstance(col_type, sa_types.Numeric):
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        elif isinstance(col_type, sa_types.DateTime):
+            if col_type.timezone:
+                df[col] = _parse_dt_with_tz(df[col])
+            else:
+                df[col] = pd.to_datetime(df[col], errors="coerce")
+        elif isinstance(col_type, sa_types.Date):
+            df[col] = pd.to_datetime(df[col], errors="coerce")
 
     return df

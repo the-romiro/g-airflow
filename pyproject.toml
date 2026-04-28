@@ -39,6 +39,7 @@ push = "docker push ${DOCKER_REGISTRY:-}airflow-gre:2.10.5"
 pre_dw = "uv run task build"
 dw = "docker compose up --watch"
 docker = "docker compose up -d"
+show-sharepoint-columns = "uv run dags/global_modules/sharepoint/show_columns.py"
 
 [tool.black]
 color = true
@@ -53,5 +54,22 @@ include_trailing_comma = true
 force_grid_wrap = 0
 combine_as_imports = true
 
+[tool.pytest.ini_options]
+pythonpath = "."
+addopts = "-p no:warnings"
+xfail_strict = true
+testpaths = ["tests", "integration"]
+
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
+preview = true
+select = ["I", "F", "E", "W", "PL", "PT"]
+ignore = ["E402", "F811"]
+
+[tool.ruff.format]
+preview = true
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false

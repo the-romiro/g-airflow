@@ -1,6 +1,7 @@
 from sqlalchemy import types as sa_types
 
 LIST_FIELDS: dict[str, sa_types.TypeEngine] = {
+    "id": sa_types.Integer(),
     "Title": sa_types.VARCHAR(255),
     "email_aprovador_eng": sa_types.VARCHAR(),
     "dt_aprovacao_eng": sa_types.DateTime(),
@@ -12,7 +13,6 @@ LIST_FIELDS: dict[str, sa_types.TypeEngine] = {
     "nome_quem_aprovou_setor": sa_types.VARCHAR(255),
     "nome_quem_aprovou_especialista": sa_types.VARCHAR(255),
     "Modified": sa_types.DateTime(timezone=True),
-    "ID": sa_types.Integer(),
     "status_aprov_setor": sa_types.VARCHAR(255),
     "status_aprov_especialista": sa_types.VARCHAR(255),
     "codigos_produto": sa_types.VARCHAR(),
@@ -24,7 +24,6 @@ LIST_FIELDS: dict[str, sa_types.TypeEngine] = {
     "nome_especialista": sa_types.VARCHAR(255),
     "nome_aprovador_setor": sa_types.VARCHAR(255),
     "email_analistas": sa_types.VARCHAR(),
-    # "url_fluxo": sa_types.VARCHAR(255),
     "email_sup_engenharia": sa_types.VARCHAR(),
     "dt_fap": sa_types.DateTime(),
     "solicitante": sa_types.VARCHAR(255),
@@ -39,18 +38,13 @@ LIST_FIELDS: dict[str, sa_types.TypeEngine] = {
     "gerente_idealizador": sa_types.VARCHAR(255),
     "cargo_idealizador": sa_types.VARCHAR(255),
     "tipo_fap": sa_types.VARCHAR(255),
-    "fabrica_melhoria/nome_fabrica2": sa_types.VARCHAR(255),
-    "filial_melhoria/nome_filial2": sa_types.VARCHAR(255),
-    "dt_fap_informada_por": sa_types.VARCHAR(255),
+    "dt_fap_informada_por": sa_types.DateTime(),
     "desc_melhoria": sa_types.VARCHAR(),
-    "origem_melhoria/Title": sa_types.VARCHAR(255),
-    "macro_setor/nome": sa_types.VARCHAR(255),
     "investimento": sa_types.Float(4),
     "custo_MOD": sa_types.Float(4),
     "desc_processo_atual": sa_types.VARCHAR(),
     "desc_processo_proposto": sa_types.VARCHAR(),
     "carga_horaria_mes": sa_types.Float(4),
-    "tipo_alteracao/Title": sa_types.VARCHAR(255),
     "gerente_melhoria": sa_types.VARCHAR(255),
     "Created": sa_types.DateTime(timezone=True),
     "comentarios_analista": sa_types.VARCHAR(),
@@ -65,8 +59,14 @@ LIST_FIELDS: dict[str, sa_types.TypeEngine] = {
     "comentarios_aprovador_gerencia_e": sa_types.VARCHAR(),
     "dt_aprovacao_gerencia_eng": sa_types.DateTime(),
     "tipo_produto": sa_types.VARCHAR(255),
-    "Author/Title": sa_types.VARCHAR(255),
-    "Editor/Title": sa_types.VARCHAR(255),
+    # Lookup / Person fields
+    "fabrica_melhoria": sa_types.VARCHAR(255),
+    "filial_melhoria": sa_types.VARCHAR(255),
+    "origem_melhoria": sa_types.VARCHAR(255),
+    "macro_setor": sa_types.VARCHAR(255),
+    "tipo_alteracao": sa_types.VARCHAR(255),
+    "Author": sa_types.VARCHAR(255),
+    "Editor": sa_types.VARCHAR(255),
 }
 
 EXPAND_FIELDS = [

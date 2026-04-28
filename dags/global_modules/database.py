@@ -1,10 +1,11 @@
 from functools import cache
 from typing import Literal
 
-from airflow.models import Variable
-from sqlalchemy import create_engine, text
-
 from global_modules.sharepoint.logs import log_message
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+
+from airflow.models import Variable
 
 ENG_DATABASE_URL = Variable.get("ENG_DATABASE_URL", None)
 
@@ -52,10 +53,12 @@ def get_estab_code(estab: Estabelecimento):
     return ESTAB_CODE[estab]
 
 
-def get_elipse_conn(estab: Estabelecimento, fast_executemany=False):
+def get_elipse_conn(estab: Estabelecimento, fast_executemany=False) -> Engine:
     string_conn = _get_var(CONNECTIONS_VAR[estab])
 
-    return create_engine(string_conn, fast_executemany=fast_executemany)
+    return create_engine(
+        string_conn, fast_executemany=fast_executemany
+    )  # pyright: ignore[reportReturnType]
 
 
 def get_cx_conn(conn: ConnectorxVars):
@@ -70,11 +73,21 @@ def get_duckdb_conn(conn: DuckdbVars):
     return string_conn
 
 
-def get_eng_conn(fast_executemany=False):
+def get_eng_conn(fast_executemany=False) -> Engine:
     if ENG_DATABASE_URL is None:
         raise ValueError("Variável do airflow 'ENG_DATABASE_URL' não foi definida.")
 
-    return create_engine(ENG_DATABASE_URL, fast_executemany=fast_executemany)
+    return create_engine(
+        ENG_DATABASE_URL, fast_executemany=fast_executemany
+    )  # pyright: ignore[reportReturnType]
+
+
+def exec_query_eng_db(query: str):
+    log_message(f"⚠️ Executando query '{query}'.")
+    with get_eng_conn().begin() as conn:  # type: ignore
+        conn.execute(text(query))  # type: ignore
+        # conn.commit()
+    log_message("✅ Query finalizada.")
 
 
 def exec_merge(store_procedure: str):

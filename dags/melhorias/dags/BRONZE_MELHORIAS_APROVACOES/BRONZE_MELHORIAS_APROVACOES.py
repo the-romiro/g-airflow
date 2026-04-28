@@ -1,20 +1,16 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
-from airflow.decorators import task
-from sqlalchemy.types import TypeEngine
-
 from airflow import DAG
-from global_modules.database import exec_merge, get_eng_conn
+from airflow.decorators import task
+from global_modules.database import exec_query_eng_db, get_eng_conn
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.sharepoint.logs import log_message
-from global_modules.sharepoint.sharepoint import fetch_sharepoint_items
-from melhorias.dags.SILVER_F_MELHORIAS_APROVACOES.fields import (
-    DATETIME_WITH_TIMEZONE_FIELDS,
-    EXPAND_FIELDS,
-    LIST_FIELDS,
-)
+from global_modules.sharepoint.sharepoint import fetch_sharepoint_items_with_graph_api
+from global_modules.utils import read_sql_file
+from melhorias.dags.BRONZE_MELHORIAS_APROVACOES.fields import LIST_FIELDS
+from sqlalchemy.types import TypeEngine
 
 HERE = Path(__file__).parent
 
@@ -24,7 +20,7 @@ MERGE_FINISHED_FILE = Path(HERE, "merge.finished")
 
 
 def insert_into_dbengenharia(df: pd.DataFrame, dtype: dict[str, TypeEngine]):
-    table_name = "tmp_melhorias_aprovacao"
+    table_name = "stg_mel_aprovacao"
     df.to_sql(
         name=table_name,
         con=get_eng_conn(fast_executemany=True),
@@ -45,33 +41,34 @@ def insert_into_dbengenharia(df: pd.DataFrame, dtype: dict[str, TypeEngine]):
 def extract_sharepoint():
     if APROVACAO_FILE.exists():
         return
-    df = fetch_sharepoint_items(
+    df = fetch_sharepoint_items_with_graph_api(
         list_fields=LIST_FIELDS,
-        expand_fields=EXPAND_FIELDS,
-        datetime_columns=DATETIME_WITH_TIMEZONE_FIELDS,
-        retrieve=10_000,
+        site_url="https://grendenecombr.sharepoint.com/sites/dados_industriais/sis_melhorias",
+        list_name="Coletar_Assinaturas",
+        start_date=datetime.now(timezone.utc) - timedelta(days=30),
     )
     df.to_parquet(APROVACAO_FILE)
 
 
 @task
 def store():
-    if MERGE_FINISHED_FILE.exists():
+    if STORE_FINISHED_FILE.exists():
         return
 
     df = pd.read_parquet(APROVACAO_FILE)
     insert_into_dbengenharia(df, LIST_FIELDS)
-    MERGE_FINISHED_FILE.touch()
+    STORE_FINISHED_FILE.touch()
 
 
 @task
 def merge_data():
-    if STORE_FINISHED_FILE.exists():
+    if MERGE_FINISHED_FILE.exists():
         return
 
-    exec_merge("sp_merge_melhorias_aprovacao")
+    exec_query_eng_db(read_sql_file('merge_aprovacoes.sql', __file__))
+    # exec_merge("sp_merge_melhorias_aprovacao")
 
-    STORE_FINISHED_FILE.touch()
+    MERGE_FINISHED_FILE.touch()
 
 
 @task
@@ -90,7 +87,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="SILVER_F_MELHORIA_APROVACAO",
+    dag_id="BRONZE_MELHORIA_APROVACAO",
     default_args=default_args,
     schedule="10 10 * * *",  # 07:10 para UTC-3
     catchup=False,
