@@ -1,106 +1,198 @@
-MERGE dbengenharia.dbo.mel_ganhos AS t
-USING dbengenharia.dbo.stg_mel_ganhos AS s
-ON (t.id = s.id)
-
+MERGE [dbengenharia].[dbo].[mel_ganhos] AS T
+USING [dbengenharia].[dbo].[stg_mel_ganhos] AS S
+ON
+  (T.Id = S.Id)
+-- UPDATE (incremental)
 WHEN MATCHED
-  THEN
-  UPDATE
-    SET
-      t.tipo_melhoria = s.tipo_melhoria
-    , t.filial = s.filial
-    , t.fabrica = s.fabrica
-    , t.setor = s.setor
-    , t.nome_solicitante = s.nome_solicitante
-    , t.numero_fap = s.numero_fap2
-    , t.dt_fap = CAST(s.dt_fap AS DATE)
-    , t.cod_prod = s.cod_prod
-    , t.preco_mp = s.preco_mp
-    , t.consumo_anterior = s.consumo_anterior
-    , t.consumo_atual = s.consumo_atual
-    , t.padrao_anterior = s.padrao_anterior
-    , t.padrao_atual = s.padrao_atual
-    , t.efetivo_anterior = s.efetivo_anterior
-    , t.efetivo_atual = s.efetivo_atual
-    , t.tc_anterior = s.tc_anterior
-    , t.tc_atual = s.tc_atual
-    , t.mix = s.mix
-    , t.volume_mes_1 = s.volume_mes_1
-    , t.volume_mes_2 = s.volume_mes_2
-    , t.volume_mes_3 = s.volume_mes_3
-    , t.volume_mes_4 = s.volume_mes_4
-    , t.percentual_ganho = s.[_x0025__ganho]
-    , t.custo_par_anterior = s.custo_par_anterior
-    , t.custo_par_atual = s.custo_par_atual
-    , t.origem_melhoria = s.origem_melhoria
-    , t.macro_setor = s.macro_setor
-    , t.replicavel = s.replicavel
-    , t.nome_setor_replicavel = s.nome_setor_replicavel
-    , t.is_lacamento_manual = s.is_lacamento_manual
-    , t.investimento = s.investimento
-    , t.cracha_idealizador = s.cracha_idealizador
-    , t.descricao_proc_atual_outras_m = s.descricao_proc_atual_outras_m
-    , t.descricao_proc_prop_outras_m = s.descricao_proc_prop_outras_m
-    , t.qtde_mo_atual_outras_m = s.qtde_mo_atual_outras_m
-    , t.qtde_mo_proposto_outras_m = s.qtde_mo_proposto_outras_m
-    , t.dt_fap_informada_por = s.dt_fap_informada_por
-    , t.custo_mod = s.salario_mod
-    , t.carga_horaria_mes = s.carga_horaria_mes
-    , t.peso_ponderado_componente = s.peso_ponderado_componente
-    , t.ganho_previsto = s.ganho_previsto
-    , t.tipo_alteracao = s.tipo_alteracao
-    , t.id_solicitacao_assinatura = s.id_solicitacao_assinatura
-    , t.gerente = s.gerente
-    , t.tipo_fap = s.tipo_fap
-    , t.nome_idealizador = s.nome_idealizador
-    , t.cc_idealizador = s.cc_idealizador
-    , t.gerente_idealizador = s.gerente_x0020_idealizador
-    , t.created = s.created
-    , t.modified = s.modified
-    , t.replicacao = s.[_x00c9__x0020_uma_x0020_replica_]
-    , t.volume_foi_editado = s.volume_x0020_foi_x0020_editado
-    , t.cargo = s.cargo
-    , t.status_liberacao = CAST(s.status_x0020_de_x0020_libera_x00 AS VARCHAR)
-    , t.tipo_produto = s.tipo_produto
-    , t.author = s.author
-    , t.editor = s.editor
-
-WHEN NOT MATCHED
+AND (
+  T.Modified <> S.Modified
+  OR T.Modified IS NULL AND S.Modified IS NOT NULL
+  OR T.Modified IS NOT NULL AND S.Modified IS NULL
+)
+  THEN UPDATE SET
+    T.Tipo_melhoria = S.Tipo_melhoria
+  , T.Filial = S.Filial
+  , T.Fabrica = S.Fabrica
+  , T.Setor = S.Setor
+  , T.Nome_solicitante = S.Nome_solicitante
+  , T.Numero_fap = S.Numero_fap2
+  , T.Dt_fap = CAST(S.Dt_fap AS DATE)
+  , T.Cod_prod = S.Cod_prod
+  , T.Preco_mp = S.Preco_mp
+  , T.Consumo_anterior = S.Consumo_anterior
+  , T.Consumo_atual = S.Consumo_atual
+  , T.Padrao_anterior = S.Padrao_anterior
+  , T.Padrao_atual = S.Padrao_atual
+  , T.Efetivo_anterior = S.Efetivo_anterior
+  , T.Efetivo_atual = S.Efetivo_atual
+  , T.Tc_anterior = S.Tc_anterior
+  , T.Tc_atual = S.Tc_atual
+  , T.Mix = S.Mix
+  , T.Volume_mes_1 = S.Volume_mes_1
+  , T.Volume_mes_2 = S.Volume_mes_2
+  , T.Volume_mes_3 = S.Volume_mes_3
+  , T.Volume_mes_4 = S.Volume_mes_4
+  , T.Percentual_ganho = S.[_x0025__ganho]
+  , T.Custo_par_anterior = S.Custo_par_anterior
+  , T.Custo_par_atual = S.Custo_par_atual
+  , T.Origem_melhoria = S.Origem_melhoria
+  , T.Macro_setor = S.Macro_setor
+  , T.Replicavel = S.Replicavel
+  , T.Nome_setor_replicavel = S.Nome_setor_replicavel
+  , T.Is_lacamento_manual = S.Is_lacamento_manual
+  , T.Investimento = S.Investimento
+  , T.Cracha_idealizador = S.Cracha_idealizador
+  , T.Descricao_proc_atual_outras_m = S.Descricao_proc_atual_outras_m
+  , T.Descricao_proc_prop_outras_m = S.Descricao_proc_prop_outras_m
+  , T.Qtde_mo_atual_outras_m = S.Qtde_mo_atual_outras_m
+  , T.Qtde_mo_proposto_outras_m = S.Qtde_mo_proposto_outras_m
+  , T.Dt_fap_informada_por = S.Dt_fap_informada_por
+  , T.Custo_mod = S.Salario_mod
+  , T.Carga_horaria_mes = S.Carga_horaria_mes
+  , T.Peso_ponderado_componente = S.Peso_ponderado_componente
+  , T.Ganho_previsto = S.Ganho_previsto
+  , T.Tipo_alteracao = S.Tipo_alteracao
+  , T.Id_solicitacao_assinatura = S.Id_solicitacao_assinatura
+  , T.Gerente = S.Gerente
+  , T.Tipo_fap = S.Tipo_fap
+  , T.Nome_idealizador = S.Nome_idealizador
+  , T.Cc_idealizador = S.Cc_idealizador
+  , T.Gerente_idealizador = S.Gerente_x0020_idealizador
+  , T.Created = S.Created
+  , T.Modified = S.Modified
+  , T.Replicacao = S.[_x00c9__x0020_uma_x0020_replica_]
+  , T.Volume_foi_editado = S.Volume_x0020_foi_x0020_editado
+  , T.Cargo = S.Cargo
+  , T.Status_liberacao = S.Status_x0020_de_x0020_libera_x00
+  , T.Tipo_produto = S.Tipo_produto
+  , T.Author = S.Author
+  , T.Editor = S.Editor
+-- INSERT
+WHEN NOT MATCHED BY TARGET
   THEN
   INSERT (
-    id, tipo_melhoria, filial, fabrica, setor, nome_solicitante, numero_fap, dt_fap
-  , cod_prod, preco_mp, consumo_anterior, consumo_atual, padrao_anterior, padrao_atual
-  , efetivo_anterior, efetivo_atual, tc_anterior, tc_atual, mix, volume_mes_1
-  , volume_mes_2, volume_mes_3, volume_mes_4, percentual_ganho, custo_par_anterior
-  , custo_par_atual, origem_melhoria, macro_setor, replicavel, nome_setor_replicavel
-  , is_lacamento_manual, investimento, cracha_idealizador, descricao_proc_atual_outras_m
-  , descricao_proc_prop_outras_m, qtde_mo_atual_outras_m, qtde_mo_proposto_outras_m
-  , dt_fap_informada_por, custo_mod, carga_horaria_mes, peso_ponderado_componente
-  , ganho_previsto, tipo_alteracao, id_solicitacao_assinatura, gerente, tipo_fap
-  , nome_idealizador, cc_idealizador, gerente_idealizador, created, modified
-  , replicacao, volume_foi_editado, cargo, status_liberacao, tipo_produto, author, editor
+    Id
+  , Tipo_melhoria
+  , Filial
+  , Fabrica
+  , Setor
+  , Nome_solicitante
+  , Numero_fap
+  , Dt_fap
+  , Cod_prod
+  , Preco_mp
+  , Consumo_anterior
+  , Consumo_atual
+  , Padrao_anterior
+  , Padrao_atual
+  , Efetivo_anterior
+  , Efetivo_atual
+  , Tc_anterior
+  , Tc_atual
+  , Mix
+  , Volume_mes_1
+  , Volume_mes_2
+  , Volume_mes_3
+  , Volume_mes_4
+  , Percentual_ganho
+  , Custo_par_anterior
+  , Custo_par_atual
+  , Origem_melhoria
+  , Macro_setor
+  , Replicavel
+  , Nome_setor_replicavel
+  , Is_lacamento_manual
+  , Investimento
+  , Cracha_idealizador
+  , Descricao_proc_atual_outras_m
+  , Descricao_proc_prop_outras_m
+  , Qtde_mo_atual_outras_m
+  , Qtde_mo_proposto_outras_m
+  , Dt_fap_informada_por
+  , Custo_mod
+  , Carga_horaria_mes
+  , Peso_ponderado_componente
+  , Ganho_previsto
+  , Tipo_alteracao
+  , Id_solicitacao_assinatura
+  , Gerente
+  , Tipo_fap
+  , Nome_idealizador
+  , Cc_idealizador
+  , Gerente_idealizador
+  , Created
+  , Modified
+  , Replicacao
+  , Volume_foi_editado
+  , Cargo
+  , Status_liberacao
+  , Tipo_produto
+  , Author
+  , Editor
   )
   VALUES (
-    s.id
-  , s.tipo_melhoria
-  , s.filial
-  , s.fabrica
-  , s.setor
-  , s.nome_solicitante
-  , s.numero_fap2
-  , CAST(s.dt_fap AS DATE)
-  , s.cod_prod, s.preco_mp, s.consumo_anterior, s.consumo_atual, s.padrao_anterior, s.padrao_atual
-  , s.efetivo_anterior, s.efetivo_atual, s.tc_anterior, s.tc_atual, s.mix, s.volume_mes_1
-  , s.volume_mes_2, s.volume_mes_3, s.volume_mes_4, s.[_x0025__ganho], s.custo_par_anterior
-  , s.custo_par_atual, s.origem_melhoria, s.macro_setor, s.replicavel, s.nome_setor_replicavel
-  , s.is_lacamento_manual, s.investimento, s.cracha_idealizador, s.descricao_proc_atual_outras_m
-  , s.descricao_proc_prop_outras_m, s.qtde_mo_atual_outras_m, s.qtde_mo_proposto_outras_m
-  , s.dt_fap_informada_por, s.salario_mod, s.carga_horaria_mes, s.peso_ponderado_componente
-  , s.ganho_previsto, s.tipo_alteracao, s.id_solicitacao_assinatura, s.gerente, s.tipo_fap
-  , s.nome_idealizador, s.cc_idealizador, s.gerente_x0020_idealizador, s.created, s.modified
-  , s.[_x00c9__x0020_uma_x0020_replica_], s.volume_x0020_foi_x0020_editado, s.cargo
-  , CAST(s.status_x0020_de_x0020_libera_x00 AS VARCHAR), s.tipo_produto, s.author, s.editor
+    S.Id
+  , S.Tipo_melhoria
+  , S.Filial
+  , S.Fabrica
+  , S.Setor
+  , S.Nome_solicitante
+  , S.Numero_fap2
+  , CAST(S.Dt_fap AS DATE)
+  , S.Cod_prod
+  , S.Preco_mp
+  , S.Consumo_anterior
+  , S.Consumo_atual
+  , S.Padrao_anterior
+  , S.Padrao_atual
+  , S.Efetivo_anterior
+  , S.Efetivo_atual
+  , S.Tc_anterior
+  , S.Tc_atual
+  , S.Mix
+  , S.Volume_mes_1
+  , S.Volume_mes_2
+  , S.Volume_mes_3
+  , S.Volume_mes_4
+  , S.[_x0025__ganho]
+  , S.Custo_par_anterior
+  , S.Custo_par_atual
+  , S.Origem_melhoria
+  , S.Macro_setor
+  , S.Replicavel
+  , S.Nome_setor_replicavel
+  , S.Is_lacamento_manual
+  , S.Investimento
+  , S.Cracha_idealizador
+  , S.Descricao_proc_atual_outras_m
+  , S.Descricao_proc_prop_outras_m
+  , S.Qtde_mo_atual_outras_m
+  , S.Qtde_mo_proposto_outras_m
+  , S.Dt_fap_informada_por
+  , S.Salario_mod
+  , S.Carga_horaria_mes
+  , S.Peso_ponderado_componente
+  , S.Ganho_previsto
+  , S.Tipo_alteracao
+  , S.Id_solicitacao_assinatura
+  , S.Gerente
+  , S.Tipo_fap
+  , S.Nome_idealizador
+  , S.Cc_idealizador
+  , S.Gerente_x0020_idealizador
+  , S.Created
+  , S.Modified
+  , S.[_x00c9__x0020_uma_x0020_replica_]
+  , S.Volume_x0020_foi_x0020_editado
+  , S.Cargo
+  , S.Status_x0020_de_x0020_libera_x00
+  , S.Tipo_produto
+  , S.Author
+  , S.Editor
   )
 
 -- DELETE
+-- Deletamos no range de 90 dias.
 WHEN NOT MATCHED BY SOURCE
+AND T.Created >= DATEADD(DAY, -90, GETDATE())
   THEN DELETE;

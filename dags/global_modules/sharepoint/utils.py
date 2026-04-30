@@ -1,7 +1,13 @@
 import numpy as np
 import pandas as pd
+from global_modules.sharepoint.sql_cast import build_select_with_cast, sa_type_to_duckdb
 from office365.sharepoint.lists.list import List
 from sqlalchemy import types as sa_types
+
+__all__ = [
+    "build_select_with_cast",
+    "sa_type_to_duckdb",
+]
 
 EXCLUDE_FIELDS = (
     "Attachments,ItemChildCount,FolderChildCount,DocIcon,LinkTitle,"
@@ -111,7 +117,7 @@ def _parse_bool_series(series: pd.Series) -> pd.Series:
 
 def _parse_dt_with(series: pd.Series, tz=False) -> pd.Series:
     formats = ["%d/%m/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S"]
-    parsed = pd.to_datetime(series, utc=True, errors="coerce")
+    parsed = pd.to_datetime(series, utc=tz, errors="coerce")
     if parsed.isna().any():
         for fmt in formats:
             if tz:

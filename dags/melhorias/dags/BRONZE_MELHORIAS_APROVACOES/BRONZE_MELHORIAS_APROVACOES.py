@@ -8,6 +8,7 @@ from airflow.utils.log.logging_mixin import LoggingMixin
 from global_modules.database import exec_query_eng_db, get_duckdb_conn
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.sharepoint.sharepoint import fetch_sharepoint_items_with_graph_api
+from global_modules.sharepoint.utils import build_select_with_cast
 from global_modules.utils import read_sql_file
 from melhorias.dags.BRONZE_MELHORIAS_APROVACOES.fields import LIST_FIELDS
 
@@ -15,7 +16,7 @@ log = LoggingMixin().log
 
 HERE = Path(__file__).parent
 
-APROVACAO_FILE = Path(HERE, "aprovacao.parquet")
+DATA_FILE = Path(HERE, "data.parquet")
 STORE_FINISHED_FILE = Path(HERE, "store.finished")
 MERGE_FINISHED_FILE = Path(HERE, "merge.finished")
 
@@ -27,11 +28,11 @@ MERGE_FINISHED_FILE = Path(HERE, "merge.finished")
     max_retry_delay=timedelta(minutes=30),
 )
 def extract_sharepoint():
-    if APROVACAO_FILE.exists():
-        log.info("[SKIP] Parquet de aprovações já existe, pulando extração")
+    if DATA_FILE.exists():
+        log.info("[SKIP] Parquet já existe, pulando extração")
         return
 
-    log.info("[START] Buscando itens de Aprovações no SharePoint (últimos 30 dias)")
+    log.info("[START] Buscando itens no SharePoint")
 
     df = fetch_sharepoint_items_with_graph_api(
         list_fields=LIST_FIELDS,
@@ -42,11 +43,11 @@ def extract_sharepoint():
 
     log.info(f"[INFO] {len(df)} registros extraídos do SharePoint")
 
-    tmp = APROVACAO_FILE.with_suffix(".tmp")
+    tmp = DATA_FILE.with_suffix(".tmp")
     df.to_parquet(tmp)
-    tmp.rename(APROVACAO_FILE)
+    tmp.rename(DATA_FILE)
 
-    log.info(f"[DONE] Parquet gravado → {APROVACAO_FILE.name}")
+    log.info(f"[DONE] Parquet gravado → {DATA_FILE.name}")
 
 
 @task
@@ -55,24 +56,25 @@ def store():
         log.info("[SKIP] store já concluído")
         return
 
-    if not APROVACAO_FILE.exists():
+    if not DATA_FILE.exists():
         log.warning("[WARN] Parquet não encontrado, pulando store")
         return
 
-    log.info("[START] Carregando parquet para stg_mel_aprovacao")
+    log.info("[START] Carregando parquet")
 
     conn_str = get_duckdb_conn("dbengenharia")
+
+    table_name = "dbo.stg_mel_aprovacao"
 
     with duckdb.connect() as con:
         con.execute("INSTALL mssql FROM community;")
         con.execute("LOAD mssql;")
         con.execute(f"ATTACH '{conn_str}' AS db (TYPE mssql);")
-        con.execute(
-            f"COPY (SELECT * FROM read_parquet('{APROVACAO_FILE}')) "
-            "TO 'db.dbo.stg_mel_aprovacao' (FORMAT 'bcp', REPLACE true);"
-        )
+        # Temos que fazer o cast para os tipos corretos, pois a inferência não é confiável.
+        projection = build_select_with_cast(DATA_FILE, LIST_FIELDS)
+        con.execute(f"COPY ({projection}) TO 'db.{table_name}' (FORMAT 'bcp', REPLACE true);")
 
-    log.info("[DONE] Dados inseridos em stg_mel_aprovacao")
+    log.info(f"[DONE] Dados inseridos em {table_name}")
     STORE_FINISHED_FILE.touch()
 
 
@@ -82,7 +84,7 @@ def merge_data():
         log.info("[SKIP] merge_data já concluído")
         return
 
-    log.info("[START] Executando merge_aprovacoes.sql")
+    log.info("[START] Executando SQL")
 
     exec_query_eng_db(read_sql_file("merge_aprovacoes.sql", __file__))
 
@@ -92,9 +94,9 @@ def merge_data():
 
 @task
 def delete_cache():
-    log.info("[CLEANUP] Removendo parquet e sentinelas")
+    log.info("[CLEANUP] Removendo cache")
 
-    APROVACAO_FILE.unlink(missing_ok=True)
+    DATA_FILE.unlink(missing_ok=True)
     STORE_FINISHED_FILE.unlink(missing_ok=True)
     MERGE_FINISHED_FILE.unlink(missing_ok=True)
 
@@ -114,7 +116,7 @@ default_args = {
 with DAG(
     dag_id="BRONZE_MELHORIA_APROVACAO",
     default_args=default_args,
-    schedule="10 10 * * *",  # 07:10 para UTC-3
+    schedule="@hourly",
     catchup=False,
     max_active_runs=1,
     tags=["melhorias", "bronze"],
