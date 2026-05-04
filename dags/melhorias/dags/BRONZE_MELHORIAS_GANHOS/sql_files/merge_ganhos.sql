@@ -1,15 +1,14 @@
-MERGE [dbengenharia].[dbo].[mel_ganhos] AS T
-USING [dbengenharia].[dbo].[stg_mel_ganhos] AS S
-ON
-  (T.Id = S.Id)
--- UPDATE (incremental)
-WHEN MATCHED
-AND (
-  T.Modified <> S.Modified
-  OR T.Modified IS NULL AND S.Modified IS NOT NULL
-  OR T.Modified IS NOT NULL AND S.Modified IS NULL
-)
-  THEN UPDATE SET
+SET XACT_ABORT ON;
+SET NOCOUNT ON;
+
+BEGIN TRY
+  BEGIN TRANSACTION;
+
+  --------------------------------------------------------------------------
+  -- 1) UPDATE incremental
+  --------------------------------------------------------------------------
+  UPDATE T
+  SET
     T.Tipo_melhoria = S.Tipo_melhoria
   , T.Filial = S.Filial
   , T.Fabrica = S.Fabrica
@@ -67,10 +66,18 @@ AND (
   , T.Tipo_produto = S.Tipo_produto
   , T.Author = S.Author
   , T.Editor = S.Editor
--- INSERT
-WHEN NOT MATCHED BY TARGET
-  THEN
-  INSERT (
+  FROM [dbengenharia].[dbo].[mel_ganhos] AS T
+    INNER JOIN [dbengenharia].[dbo].[stg_mel_ganhos] AS S
+    ON T.Id = S.Id
+  WHERE
+    T.Modified <> S.Modified
+    OR (T.Modified IS NULL AND S.Modified IS NOT NULL)
+    OR (T.Modified IS NOT NULL AND S.Modified IS NULL);
+
+    --------------------------------------------------------------------------
+    -- 2) INSERT de novos registros
+    --------------------------------------------------------------------------
+  INSERT INTO [dbengenharia].[dbo].[mel_ganhos] (
     Id
   , Tipo_melhoria
   , Filial
@@ -130,7 +137,7 @@ WHEN NOT MATCHED BY TARGET
   , Author
   , Editor
   )
-  VALUES (
+  SELECT
     S.Id
   , S.Tipo_melhoria
   , S.Filial
@@ -189,10 +196,33 @@ WHEN NOT MATCHED BY TARGET
   , S.Tipo_produto
   , S.Author
   , S.Editor
-  )
+  FROM [dbengenharia].[dbo].[stg_mel_ganhos] AS S
+  WHERE
+    NOT EXISTS (
+      SELECT 1
+      FROM [dbengenharia].[dbo].[mel_ganhos] AS T
+      WHERE
+        T.Id = S.Id
+    );
 
--- DELETE
--- Deletamos no range de 90 dias.
-WHEN NOT MATCHED BY SOURCE
-AND T.Created >= DATEADD(DAY, -90, GETDATE())
-  THEN DELETE;
+    --------------------------------------------------------------------------
+    -- 3) DELETE de registros removidos da origem (janela de 30 dias)
+    --------------------------------------------------------------------------
+  DELETE T
+  FROM [dbengenharia].[dbo].[mel_ganhos] AS T
+  WHERE
+    T.Created >= DATEADD(DAY, -30, GETDATE())
+    AND NOT EXISTS (
+      SELECT 1
+      FROM [dbengenharia].[dbo].[stg_mel_ganhos] AS S
+      WHERE
+        S.Id = T.Id
+    );
+
+  COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+  IF XACT_STATE() <> 0
+    ROLLBACK TRANSACTION;
+  THROW;
+END CATCH;
