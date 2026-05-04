@@ -206,12 +206,12 @@ BEGIN TRY
     );
 
     --------------------------------------------------------------------------
-    -- 3) DELETE de registros removidos da origem (janela de 30 dias)
+    -- 3) DELETE de registros removidos da origem (janela de 90 dias)
     --------------------------------------------------------------------------
   DELETE T
   FROM [dbengenharia].[dbo].[mel_ganhos] AS T
   WHERE
-    T.Created >= DATEADD(DAY, -30, GETDATE())
+    T.Created >= DATEADD(DAY, -90, GETDATE())
     AND NOT EXISTS (
       SELECT 1
       FROM [dbengenharia].[dbo].[stg_mel_ganhos] AS S

@@ -38,7 +38,8 @@ def extract_sharepoint():
         list_fields=LIST_FIELDS,
         site_url="https://grendenecombr.sharepoint.com/sites/dados_industriais/sis_melhorias",
         list_name="Coletar_Assinaturas",
-        start_date=datetime.now(timezone.utc) - timedelta(days=30),
+        # Se colocar menos de 90 dias, ajuste o DELETE da query.
+        start_date=datetime.now(timezone.utc) - timedelta(days=90),
     )
 
     log.info(f"[INFO] {len(df)} registros extraídos do SharePoint")
@@ -116,7 +117,7 @@ default_args = {
 with DAG(
     dag_id="BRONZE_MELHORIA_APROVACAO",
     default_args=default_args,
-    schedule="@hourly",
+    schedule="0 */3 * * *",  # A cada 3 horas
     catchup=False,
     max_active_runs=1,
     tags=["melhorias", "bronze"],
