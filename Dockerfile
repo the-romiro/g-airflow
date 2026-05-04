@@ -34,4 +34,7 @@ RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
   office365-rest-python-client \
   duckdb \
   connectorx && \
-  python -c "import duckdb; con = duckdb.connect(); con.execute('INSTALL mssql FROM community'); con.close()"
+  python -c "import duckdb; con = duckdb.connect(); con.execute('INSTALL mssql FROM community'); con.close()" && \
+  # Quando instalamos lib do ddb, ele vai precisar de permissão para
+  # usar a pasta e precisa de permissão.
+  chmod -R 777 /home/airflow/.duckdb/
