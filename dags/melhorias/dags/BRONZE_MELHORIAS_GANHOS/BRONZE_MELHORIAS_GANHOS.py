@@ -2,8 +2,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import duckdb
-from airflow import DAG
+from airflow import DAG, Dataset
 from airflow.decorators import task
+from airflow.operators.empty import EmptyOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
 from global_modules.database import exec_query_eng_db, get_duckdb_conn
 from global_modules.ms_teams import notify_teams_on_failure
@@ -13,6 +14,8 @@ from global_modules.utils import read_sql_file
 from melhorias.dags.BRONZE_MELHORIAS_GANHOS.fields import LIST_FIELDS
 
 log = LoggingMixin().log
+
+MEL_GANHOS_DATASET = Dataset("melhorias://bronze/melhoria_ganhos")
 
 HERE = Path(__file__).parent
 
@@ -52,7 +55,7 @@ def extract_sharepoint():
 
 
 @task
-def store():
+def store_stg():
     if STORE_FINISHED_FILE.exists():
         log.info("[SKIP] store já concluído")
         return
@@ -79,8 +82,8 @@ def store():
     STORE_FINISHED_FILE.touch()
 
 
-@task
-def merge_data():
+@task(outlets=[MEL_GANHOS_DATASET])
+def sync_bronze_layer():
     if MERGE_FINISHED_FILE.exists():
         log.info("[SKIP] merge_data já concluído")
         return
@@ -122,4 +125,7 @@ with DAG(
     max_active_runs=1,
     tags=["melhorias", "bronze"],
 ) as dag:
-    _ = extract_sharepoint() >> store() >> merge_data() >> delete_cache()
+    start = EmptyOperator(task_id="start")
+    end = EmptyOperator(task_id="end")
+
+    _ = start >> extract_sharepoint() >> store_stg() >> sync_bronze_layer() >> delete_cache() >> end
