@@ -109,9 +109,10 @@ cte_horarios AS (
   -- Turno 1
   SELECT
     h.[cod_setor]
-  , d.[Dia]                                                           AS [data_turno]
-  , 1 AS [num_turno]
-  , CAST(CAST(d.[Dia] AS VARCHAR) + ' ' + CAST(h.[Ini_1_T1] AS VARCHAR) AS DATETIME) AS [inicio_turno]
+  , d.[Dia]                                                                          AS [data_turno]
+  , 1                                                                                AS [num_turno]
+  , CAST(CAST(d.[Dia] AS VARCHAR) + ' ' + CAST(h.[Ini_1_T1] AS VARCHAR) AS DATETIME)
+      AS [inicio_turno]
   , CAST(CAST(d.[Dia] AS VARCHAR) + ' ' + CAST(h.[Fim_1_T1] AS VARCHAR) AS DATETIME) AS [fim_turno]
   FROM datasparaanalisar d CROSS JOIN cte_horarios h
   UNION ALL
@@ -208,8 +209,12 @@ cte_horarios AS (
   , prod.[cod_produto]
   , prod.[DataInicio]
   , prod.[DataFim]
-  , CASE WHEN par.[Hora_Inicio] < prod.[DataInicio] THEN prod.[DataInicio] ELSE par.[Hora_Inicio] END AS [ini_parada]
-  , CASE WHEN par.[E3TimeStamp] > prod.[DataFim] THEN prod.[DataFim] ELSE par.[E3TimeStamp] END AS [fim_parada]
+  , CASE
+      WHEN par.[Hora_Inicio] < prod.[DataInicio] THEN prod.[DataInicio] ELSE par.[Hora_Inicio]
+    END AS [ini_parada]
+  , CASE
+      WHEN par.[E3TimeStamp] > prod.[DataFim] THEN prod.[DataFim] ELSE par.[E3TimeStamp]
+    END AS [fim_parada]
   FROM cte_produtos_validos prod
     LEFT JOIN cte_paradas_sem_peso par
     ON par.[Maquina_ID] = prod.[ID_Maq]
@@ -328,7 +333,7 @@ cte_horarios AS (
 , cte_disp AS (
   SELECT
     p.[cod_produto]
-  , t.[data_turno]  AS [data]
+  , t.[data_turno] AS [data]
   , SUM(CASE WHEN p.[tipo_parada] = 'Disponibilidade'
         THEN DATEDIFF(
             SECOND
@@ -336,7 +341,7 @@ cte_horarios AS (
           , CASE WHEN p.[ts_fim] < t.[fim_turno] THEN p.[ts_fim] ELSE t.[fim_turno] END
           )
       ELSE 0
-    END) AS [tempo_disp]
+    END)           AS [tempo_disp]
   , SUM(CASE WHEN p.[tipo_parada] = 'Setup'
         THEN DATEDIFF(
             SECOND
@@ -344,7 +349,7 @@ cte_horarios AS (
           , CASE WHEN p.[ts_fim] < t.[fim_turno] THEN p.[ts_fim] ELSE t.[fim_turno] END
           )
       ELSE 0
-    END) AS [tempo_setup]
+    END)           AS [tempo_setup]
   FROM cte_paradas_com_peso p
     JOIN turnosgrid t
     ON p.[ts_inicio] < t.[fim_turno]
@@ -435,9 +440,9 @@ cte_horarios AS (
 -- SALDO TC dos ciclos (de #ciclos, já agregado na Etapa 1)
 , cte_ciclos AS (
   SELECT
-    [cod_produto] COLLATE database_default                AS [cod_produto]
-  , [data_ciclo]                          AS [data]
-  , SUM([soma_ganho]) + SUM([soma_perda]) AS [saldo_tc]
+    [cod_produto] COLLATE database_default AS [cod_produto]
+  , [data_ciclo]                           AS [data]
+  , SUM([soma_ganho]) + SUM([soma_perda])  AS [saldo_tc]
   FROM [#ciclos]
   GROUP BY [cod_produto], [data_ciclo]
 )
@@ -448,11 +453,11 @@ cte_horarios AS (
     tu.[cod_produto]
   , tu.[data]
   , tu.[tempo_util]
-  , COALESCE(d.[tempo_disp], 0) AS [tempo_disp]
-  , COALESCE(d.[tempo_setup], 0) AS [tempo_setup]
-  , COALESCE(q.[tempo_qual], 0) AS [tempo_qual]
+  , COALESCE(d.[tempo_disp], 0)         AS [tempo_disp]
+  , COALESCE(d.[tempo_setup], 0)        AS [tempo_setup]
+  , COALESCE(q.[tempo_qual], 0)         AS [tempo_qual]
   , COALESCE(pp.[tempo_perf_perdas], 0) AS [tempo_perf_perdas]
-  , COALESCE(c.[saldo_tc], 0) AS [saldo_tc]
+  , COALESCE(c.[saldo_tc], 0)           AS [saldo_tc]
   FROM cte_tu tu
     LEFT JOIN cte_disp d ON d.[cod_produto] = tu.[cod_produto] AND d.[data] = tu.[data]
     LEFT JOIN cte_qual q ON q.[cod_produto] = tu.[cod_produto] AND q.[data] = tu.[data]
@@ -471,7 +476,7 @@ cte_horarios AS (
 -- ===========================================================================
 SELECT
   [cod_produto]
-, RIGHT(@@SERVERNAME, 3)            AS [estab]
+, '{estab}'           AS [estab]
 
   -- OEE
 , CAST(ROUND(
@@ -488,7 +493,7 @@ SELECT
     VARCHAR(8)
   , DATEADD(SECOND, [tempo_util], '1900-01-01')
   , 108
-  )                          AS [tempo_util_hms]
+  )                   AS [tempo_util_hms]
 
   -- Hrs Boas = TU * OEE em HH:MM:SS
 , CONVERT(
@@ -507,21 +512,21 @@ SELECT
     , '1900-01-01'
     )
   , 108
-  )                          AS [hrs_boas_hms]
+  )                   AS [hrs_boas_hms]
 
   -- Pilares de perda
 , CAST(
     ROUND(CAST([tempo_disp] + [tempo_setup] AS FLOAT) / NULLIF([tempo_util], 0) * 100, 2)
     AS DECIMAL(7, 2)
-  )             AS [pct_disp]
+  )                   AS [pct_disp]
 , CAST(
     ROUND(CAST([saldo_tc] + [tempo_perf_perdas] AS FLOAT) / NULLIF([tempo_util], 0) * 100, 2)
     AS DECIMAL(7, 2)
-  )             AS [pct_perf]
+  )                   AS [pct_perf]
 , CAST(
     ROUND(CAST([tempo_qual] AS FLOAT) / NULLIF([tempo_util], 0) * 100, 2)
     AS DECIMAL(7, 2)
-  )             AS [pct_qual]
+  )                   AS [pct_qual]
 
 , [data]
 FROM cte_oee

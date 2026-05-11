@@ -6,7 +6,7 @@ import duckdb as ddb
 from airflow.decorators import dag, task
 from airflow.operators.empty import EmptyOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
-from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn
+from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.utils import get_parquet_file, get_sentinel_file, read_sql_file
 
@@ -74,7 +74,11 @@ def extract_data(estab: Estabelecimento):
     ]
     ciclos_union = "\nUNION ALL\n".join(parts)
 
-    sql = read_sql_file(extraction_sql, __file__).format(ciclos_union=ciclos_union)
+    estab_code = get_estab_code(estab)
+
+    sql = read_sql_file(extraction_sql, __file__).format(
+        ciclos_union=ciclos_union, estab=estab_code
+    )
 
     df = cx.read_sql(get_cx_conn(estab), sql, return_type="arrow")
 
