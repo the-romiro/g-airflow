@@ -4,6 +4,7 @@ from pathlib import Path
 import connectorx as cx
 import duckdb as ddb
 from airflow.decorators import dag, task
+from airflow.operators.empty import EmptyOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
 from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn
 from global_modules.ms_teams import notify_teams_on_failure
@@ -46,7 +47,34 @@ def extract_data(estab: Estabelecimento):
 
     log.info(f"[START] Extraindo {estab}")
 
-    sql = read_sql_file(extraction_sql, __file__)
+    tables = cx.read_sql(
+        get_cx_conn(estab),
+        read_sql_file("discover_tables.sql", __file__),
+        return_type="arrow",
+    )
+    table_names = tables["TABLE_NAME"].to_pylist()
+
+    if not table_names:
+        log.warning(f"[WARN] Nenhuma tabela Ciclo encontrada em {estab}, abortando")
+        return
+
+    log.info(f"[INFO] {len(table_names)} tabelas Ciclo em {estab}")
+
+    dt_fim = datetime.now()
+    dt_inicio = dt_fim - timedelta(days=5)
+    part_template = read_sql_file("ciclo_union_part.sql", __file__)
+    parts = [
+        part_template.format(
+            id_maquina=name[6:],
+            table_name=name,
+            dt_inicio=dt_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+            dt_fim=dt_fim.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        for name in table_names
+    ]
+    ciclos_union = "\nUNION ALL\n".join(parts)
+
+    sql = read_sql_file(extraction_sql, __file__).format(ciclos_union=ciclos_union)
 
     df = cx.read_sql(get_cx_conn(estab), sql, return_type="arrow")
 
@@ -114,13 +142,16 @@ def clear_cache():
 @dag(
     dag_id="STG_ELIPSE_OEE_PRODUTO",
     default_args=default_args,
-    schedule="10 9 * * *",
+    schedule="12 9 * * *",
     catchup=False,
     max_active_runs=1,
     concurrency=2,
     tags=["elipse", "stage", "oee"],
 )
 def dag_factory():
+    start = EmptyOperator(task_id="start")
+    end = EmptyOperator(task_id="end")
+
     sob_data = extract_data.override(task_id="extract_data_sob")("sob")
     for_data = extract_data.override(task_id="extract_data_for")("for")
     cra_data = extract_data.override(task_id="extract_data_cra")("cra")
@@ -129,7 +160,7 @@ def dag_factory():
 
     clear = clear_cache()
 
-    _ = [sob_data, for_data, cra_data] >> concat >> clear
+    _ = start >> [sob_data, for_data, cra_data] >> concat >> clear >> end
 
 
 dag_factory()

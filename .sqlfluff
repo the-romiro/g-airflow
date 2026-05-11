@@ -14,6 +14,7 @@ table_name = 'table'
 dt_inicio = '2026-01-01'
 dt_fim = '2026-01-01'
 estab_code = 20
+ciclos_union = 'select * from ciclos'
 
 [sqlfluff:templater:jinja:context]
 params = {"database_id": "elipse", "target": "silver.table", "source": "stage.table"}
