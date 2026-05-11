@@ -31,37 +31,32 @@ uv sync --group dev
 
 ## Architecture
 
-### Infrastructure
+CeleryExecutor + Redis + PostgreSQL, via Docker Compose (`docker-compose.yml`). Custom image (`Dockerfile`) on `apache/airflow:2.10.5` with MS SQL Server ODBC drivers (`msodbcsql17`) and TLS downgrade (`openssl.cnf`) for SQL Server 2008. Timezone: `America/Fortaleza`. UI: `http://localhost:8080`.
 
-CeleryExecutor with Redis as broker and PostgreSQL as metadata DB. Airflow runs via Docker Compose (`docker-compose.yml`) using a custom image (`Dockerfile`) built on `apache/airflow:2.10.5`. The image adds MS SQL Server ODBC drivers (`msodbcsql17`) for connecting to SQL Server 2008, with TLS downgrade in `openssl.cnf` to handle the legacy server. Timezone is `America/Fortaleza`. Airflow UI at `http://localhost:8080` (default creds: `airflow/airflow`).
+DAGs implement **Bronze → Silver → Gold** medallion architecture for **SiMOn** (Sistema de Monitoramento Online):
 
-### Medallion Data Layers
+| Layer | Paths | Description |
+|---|---|---|
+| Bronze | `dags/flakeflow/`, `dags/melhorias/dags/BRONZE_*` | Raw ingestion |
+| Silver | `dags/simon/silver/`, `dags/simon/full_silver/`, `dags/melhorias/dags/SILVER_*` | Cleaning/transformation |
+| Gold | `dags/simon/gold/`, `dags/simon/full_gold/` | Business aggregations |
 
-DAGs implement a Bronze → Silver → Gold medallion architecture targeting **SiMOn** (Sistema de Monitoramento Online):
+`full_*` = truncate+reload; others = incremental/merge.
 
-- **Bronze** (`dags/flakeflow/`): Raw ingestion from Flakeflow source system into PostgreSQL
-- **Silver** (`dags/simon/silver/`, `dags/simon/full_silver/`, `dags/melhorias/`): Cleaning/transformation, loaded into intermediate tables
-- **Gold** (`dags/simon/gold/`, `dags/simon/full_gold/`): Business aggregations and dimensional models
+## DAG Folder Convention
 
-The `full_*` variants under `simon/` are full-reload versions (truncate + reload) vs incremental/merge variants.
-
-### DAG Folder Convention
-
-Each DAG lives in its own folder:
 ```
 dags/<domain>/dags/<DAG_NAME>/
-    <DAG_NAME>.py          # DAG definition
-    sql_files/             # SQL files for this DAG
-        extract_query.sql
-        merge_query.sql
-        ...
+    <DAG_NAME>.py
+    sql_files/
+        *.sql
 ```
 
-DAGs use `read_sql_file(filename, __file__)` to load SQL relative to the DAG file. SQL files must always be inside a `sql_files/` subfolder co-located with the DAG.
+Load SQL via `read_sql_file(filename, __file__)`. SQL must always live in `sql_files/` co-located with the DAG file.
 
-### DAG Patterns
+## DAG Patterns
 
-**Incremental DAGs** use the `@dag` decorator and `dag_factory()` called at module level:
+**Incremental** — `@dag` decorator + `dag_factory()` called at module level:
 
 ```python
 @dag(dag_id="...", default_args=default_args, ...)
@@ -71,81 +66,31 @@ def dag_factory():
 dag_factory()
 ```
 
-**Full-reload DAGs** (`full_silver/`, `full_gold/`) use the older `with DAG(...)` context manager style. Do not mix styles within the same DAG.
+**Full-reload** (`full_silver/`, `full_gold/`) — `with DAG(...)` context manager. Do not mix styles.
 
-Standard `default_args` includes `on_failure_callback: notify_teams_on_failure`, `retries=2`, `retry_delay=timedelta(minutes=2)`, `retry_exponential_backoff=True`, `max_retry_delay=timedelta(minutes=30)`.
+Standard `default_args`: `on_failure_callback: notify_teams_on_failure`, `retries=2`, `retry_delay=timedelta(minutes=2)`, `retry_exponential_backoff=True`, `max_retry_delay=timedelta(minutes=30)`.
 
-### Dataset-Based Scheduling
+**Scheduling**: Gold DAGs use `schedule=[<Dataset>]` triggered by Silver DAG outlets — not cron. New DAGs should use Datasets, not `CustomSqlSensor`.
 
-Gold DAGs are triggered via Airflow `Dataset` objects emitted by their upstream Silver DAGs — not by cron schedules. Each Silver DAG declares a `Dataset` outlet; the corresponding Gold DAG uses `schedule=[<dataset>]`. This replaces the older `CustomSqlSensor` dependency-wait pattern for most pipelines. New DAGs should use Datasets.
+## Global Modules (`dags/global_modules/`)
 
-### Idempotency Pattern
-
-Tasks that process large data use two idempotency mechanisms managed via `global_modules/utils.py`:
-
-- **Parquet sentinel** (`extract_data_{estab}.parquet`): If present, extraction is skipped. Created atomically via `.tmp` → rename.
-- **Step sentinel** (`{step_name}.finished`): If present, that step is skipped. Created via `sentinel.touch()`.
-
-A final `clear_cache()` task always deletes parquets and sentinels, resetting state for the next run.
-
-### Global Modules (`dags/global_modules/`)
-
-Shared utilities imported by all DAGs:
-
-| Module | Purpose |
+| Module | Key exports |
 |---|---|
-| `database.py` | Connection factories: `get_cx_conn()`, `get_duckdb_conn()`, `get_eng_conn()`, `get_elipse_conn()`, `exec_merge()` (stored procedures), `get_ciclos_search_window()` |
-| `utils.py` | `read_sql_file()`, `get_parquet_file()`, `get_sentinel_file()`; exports `DUCKDB_THREADS = 3` and `DUCKDB_SAVE_PARQUET_CONFIG` |
-| `operators.py` | `CustomSqlSensor` (waits for upstream DAGs via metadata DB), `SqlServerOperator` (extract to CSV at `/datalake/extraction_routine/` → COPY to Postgres) |
-| `ms_teams.py` | `notify_teams_on_failure()` callback |
+| `database.py` | `get_cx_conn()`, `get_duckdb_conn()`, `get_eng_conn()`, `get_elipse_conn()`, `exec_merge()`, `get_ciclos_search_window()` |
+| `utils.py` | `read_sql_file()`, `get_parquet_file()`, `get_sentinel_file()`, `DUCKDB_THREADS`, `DUCKDB_SAVE_PARQUET_CONFIG` |
+| `operators.py` | `CustomSqlSensor`, `SqlServerOperator` |
+| `ms_teams.py` | `notify_teams_on_failure()` |
 | `functions.py` | `get_global_config()` (reads `global_files/global_config.yml`), `get_local_config()` |
-| `sqlserver_hook.py` | Custom hook for SQL Server via pyodbc |
-| `sharepoint/` | SharePoint integration utilities |
+| `sharepoint/` | SharePoint integration via Graph API |
 
-### Establishment Codes
+## ETL Stack
 
-Elipse source data comes from three establishments:
+- **ConnectorX** (`cx.read_sql`): SQL → Arrow extraction from source DBs
+- **DuckDB**: In-process processing; ATTACH PostgreSQL for bulk loads via `INSERT INTO pg.*`
+- **SQLAlchemy / psycopg2**: Merge stored procedures, direct Postgres ops
+- **Polars/Pandas**: Dataframe ops (imported per DAG as needed)
 
-| Key | Code | Location | Airflow conn var |
-|---|---|---|---|
-| `sob` | 20 | Sobral | `elipse_sob` / `CX_ELIPSE_SOB` |
-| `for` | 21 | Fortaleza | `elipse_for` / `CX_ELIPSE_FOR` |
-| `cra` | 40 | Crato | `elipse_cra` / `CX_ELIPSE_CRA` |
+## Further Reference
 
-### Airflow Connections Required
-
-| Connection | Used by |
-|---|---|
-| `postgres_eng_server` | All Gold DAGs (`SQLExecuteQueryOperator`) |
-| `elipse_sob`, `elipse_for`, `elipse_cra` | `SqlServerOperator` for Bronze/Silver extraction |
-
-### Airflow Variables Required
-
-These must be set in Airflow's Variable store:
-
-| Variable | Used for |
-|---|---|
-| `CX_ELIPSE_SOB`, `CX_ELIPSE_FOR`, `CX_ELIPSE_CRA` | ConnectorX connection strings for Elipse establishments |
-| `CX_ELIPSE_PG` | ConnectorX connection to Postgres |
-| `CX_FLAKEFLOW_CONN` | ConnectorX connection to Flakeflow source |
-| `DDB_PG_CONN` | DuckDB ATTACH string for engineering Postgres |
-| `DDB_PG_FLAKEFLOW_CONN` | DuckDB ATTACH string for Flakeflow Postgres |
-| `ENG_DATABASE_URL` | SQLAlchemy URL for engineering Postgres |
-| `WEBHOOK_TEAMS` | MS Teams webhook URL for failure alerts |
-| `SILVER_F_CICLOS_DAYS_TO_SEARCH` | Integer lookback window for ciclos pipeline |
-| `SHAREPOINT_SITE_URL` | SharePoint site URL (ex.: `https://contoso.sharepoint.com/sites/nome`) |
-| `SHAREPOINT_CLIENT_ID` | Azure AD App Registration client ID com acesso ao SharePoint |
-| `SHAREPOINT_CLIENT_SECRET` | Azure AD App Registration client secret |
-| `SHAREPOINT_LIST_NAME` | Nome da lista SharePoint (default, pode ser sobrescrito por parâmetro) |
-| `SHAREPOINT_TENANT_ID` | Azure AD tenant ID — obrigatório para `fetch_sharepoint_items_with_graph_api` |
-
-### Dependency Waiting (Legacy Pattern)
-
-Some DAGs still use `CustomSqlSensor` with `wait_dependencies.sql` from `global_files/sql_files/`. The sensor checks `start_date` in the Airflow metadata DB via a Jinja-templated query, polling every 2 minutes with a 1-hour timeout.
-
-### ETL Technology Choices
-
-- **ConnectorX** (`cx.read_sql`): High-performance SQL → Arrow extraction from source databases
-- **DuckDB**: In-process processing and writing Parquet files; also used to ATTACH PostgreSQL and bulk-load via `INSERT INTO pg.*`
-- **SQLAlchemy / psycopg2**: Used for merge stored procedures and direct Postgres operations
-- **Polars/Pandas**: Available for dataframe operations (imported per DAG as needed)
+- [`docs/configuration.md`](docs/configuration.md) — Airflow variables, connections, establishment codes
+- [`docs/dag-patterns.md`](docs/dag-patterns.md) — Idempotency sentinels, legacy `CustomSqlSensor`
