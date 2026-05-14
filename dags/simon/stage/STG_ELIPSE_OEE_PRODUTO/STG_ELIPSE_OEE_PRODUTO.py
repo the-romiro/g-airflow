@@ -61,7 +61,7 @@ def extract_data(estab: Estabelecimento):
     log.info(f"[INFO] {len(table_names)} tabelas Ciclo em {estab}")
 
     dt_fim = datetime.now()
-    dt_inicio = dt_fim - timedelta(days=5)
+    dt_inicio = dt_fim - timedelta(days=31)
     part_template = read_sql_file("ciclo_union_part.sql", __file__)
     parts = [
         part_template.format(

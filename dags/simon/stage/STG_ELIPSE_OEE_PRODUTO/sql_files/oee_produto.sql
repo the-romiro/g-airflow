@@ -1,7 +1,7 @@
 -- sqlfluff:dialect:tsql
 -- =============================================================================
 -- oee_produto.sql
--- OEE diário por NumeroProduto — últimos 5 dias
+-- OEE diário por NumeroProduto — últimos 31 dias
 --
 -- Parâmetros (ajustar no topo):
 --   @DataInicioAnalise  : início do período
@@ -17,7 +17,7 @@
 --   - WITH (NOLOCK) em todas as tabelas de produção
 -- =============================================================================
 
-DECLARE @DataInicioAnalise DATETIME = GETDATE() - 5;
+DECLARE @DataInicioAnalise DATETIME = GETDATE() - 31;
 DECLARE @DataFimAnalise DATETIME = GETDATE();
 DECLARE @cod_produto_filtro NVARCHAR(MAX) = NULL;
 
