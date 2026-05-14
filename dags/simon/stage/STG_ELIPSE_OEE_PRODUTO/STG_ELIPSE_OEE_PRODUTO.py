@@ -149,7 +149,7 @@ def clear_cache():
     schedule="12 9 * * *",
     catchup=False,
     max_active_runs=1,
-    concurrency=2,
+    concurrency=3,
     tags=["elipse", "stage", "oee"],
 )
 def dag_factory():
