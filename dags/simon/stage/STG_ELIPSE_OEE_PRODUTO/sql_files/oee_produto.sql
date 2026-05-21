@@ -17,8 +17,8 @@
 --   - WITH (NOLOCK) em todas as tabelas de produção
 -- =============================================================================
 
-DECLARE @DataInicioAnalise DATETIME = GETDATE() - 31;
-DECLARE @DataFimAnalise DATETIME = GETDATE();
+DECLARE @DataInicioAnalise DATETIME = '{dt_inicio}';
+DECLARE @DataFimAnalise DATETIME = '{dt_fim}';
 DECLARE @cod_produto_filtro NVARCHAR(MAX) = NULL;
 
 -- ===========================================================================
@@ -486,7 +486,7 @@ SELECT
       - CAST([saldo_tc] + [tempo_perf_perdas] AS FLOAT) / NULLIF([tempo_util], 0)
       - CAST([tempo_qual] AS FLOAT) / NULLIF([tempo_util], 0)
     ) * 100, 2
-  ) AS DECIMAL(7, 2)) AS [pct_oee]
+  ) AS DECIMAL(18, 2)) AS [pct_oee]
 
   -- Tempo útil em HH:MM:SS
 , CONVERT(
@@ -517,15 +517,15 @@ SELECT
   -- Pilares de perda
 , CAST(
     ROUND(CAST([tempo_disp] + [tempo_setup] AS FLOAT) / NULLIF([tempo_util], 0) * 100, 2)
-    AS DECIMAL(7, 2)
+    AS DECIMAL(18, 2)
   )                   AS [pct_disp]
 , CAST(
     ROUND(CAST([saldo_tc] + [tempo_perf_perdas] AS FLOAT) / NULLIF([tempo_util], 0) * 100, 2)
-    AS DECIMAL(7, 2)
+    AS DECIMAL(18, 2)
   )                   AS [pct_perf]
 , CAST(
     ROUND(CAST([tempo_qual] AS FLOAT) / NULLIF([tempo_util], 0) * 100, 2)
-    AS DECIMAL(7, 2)
+    AS DECIMAL(18, 2)
   )                   AS [pct_qual]
 
 , [data]

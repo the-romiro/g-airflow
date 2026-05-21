@@ -60,27 +60,62 @@ def extract_data(estab: Estabelecimento):
 
     log.info(f"[INFO] {len(table_names)} tabelas Ciclo em {estab}")
 
+    LOOKBACK_DAYS = 31
+    N_THREADS = 8
+
+    # Por que o buffer de 12h.
+    # Turno começa 06:00h do dia N.
+    # Ciclo com E3TimeStamp = 01:00h do dia N+1 → adjustedDate = dia N (shift back).
+    # Chunk A (OEE dia N, @DataFim=N):
+    #   ciclos raw: até N+1 06:00 (buffer)
+    #     → inclui o ciclo, adjustedDate=N, @DataFimAnalise=N → contabilizado ✓
+    #   Chunk B (OEE dia N+1, @DataInicio=N+1):
+    #     mesmos ciclos brutos entram, mas adjustedDate=N < @DataInicioAnalise=N+1 → filtrado ✓
+    # Nenhum ciclo duplicado. Nenhum ciclo perdido.
+    SHIFT_BUFFER_H = 12  # captura ciclos madrugada que mapeiam para o dia anterior
+    DAYS_PER_CHUNK = max(1, -(-LOOKBACK_DAYS // N_THREADS))
+
     dt_fim = datetime.now()
-    dt_inicio = dt_fim - timedelta(days=31)
+    dt_inicio = dt_fim - timedelta(days=LOOKBACK_DAYS)
+
+    date_chunks: list[tuple[datetime, datetime]] = []
+    chunk_start = dt_inicio
+    while chunk_start < dt_fim:
+        chunk_end = min(chunk_start + timedelta(days=DAYS_PER_CHUNK), dt_fim)
+        date_chunks.append((chunk_start, chunk_end))
+        chunk_start = chunk_end
+
     part_template = read_sql_file("ciclo_union_part.sql", __file__)
-    parts = [
-        part_template.format(
-            id_maquina=name[6:],
-            table_name=name,
-            dt_inicio=dt_inicio.strftime("%Y-%m-%d %H:%M:%S"),
-            dt_fim=dt_fim.strftime("%Y-%m-%d %H:%M:%S"),
-        )
-        for name in table_names
-    ]
-    ciclos_union = "\nUNION ALL\n".join(parts)
-
     estab_code = get_estab_code(estab)
+    extraction_template = read_sql_file(extraction_sql, __file__)
 
-    sql = read_sql_file(extraction_sql, __file__).format(
-        ciclos_union=ciclos_union, estab=estab_code
+    queries = []
+    for oee_start, oee_end in date_chunks:
+        raw_inicio = oee_start - timedelta(hours=SHIFT_BUFFER_H)
+        raw_fim = oee_end + timedelta(hours=SHIFT_BUFFER_H)
+        chunk_parts = [
+            part_template.format(
+                id_maquina=name[6:],
+                table_name=name,
+                dt_inicio=raw_inicio.strftime("%Y-%m-%d %H:%M:%S"),
+                dt_fim=raw_fim.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            for name in table_names
+        ]
+        queries.append(
+            extraction_template.format(
+                ciclos_union="\nUNION ALL\n".join(chunk_parts),
+                estab=estab_code,
+                dt_inicio=oee_start.strftime("%Y-%m-%d %H:%M:%S"),
+                dt_fim=oee_end.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+        )
+
+    log.info(
+        f"[INFO] Executando {len(queries)} queries em paralelo "
+        f"({LOOKBACK_DAYS} dias / {DAYS_PER_CHUNK} dias por chunk, {len(table_names)} tabelas)"
     )
-
-    df = cx.read_sql(get_cx_conn(estab), sql, return_type="arrow")
+    df = cx.read_sql(get_cx_conn(estab), queries, return_type="arrow")
 
     log.info(f"[DONE QUERY] recuperados {df.shape[0]} linhas, {(df.nbytes / (1024**2)):.2f}MB")
 
