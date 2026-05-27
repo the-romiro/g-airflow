@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from http import HTTPStatus
 
 import requests
 from airflow.models import Variable
@@ -22,7 +23,7 @@ def send_teams_message(message: str):
     payload = {"text": message}
     response = requests.post(TEAMS_WEBHOOK_URL, headers=headers, data=json.dumps(payload))
 
-    if response.status_code != 200:
+    if response.status_code != HTTPStatus.OK:
         raise ValueError(f"Failed to send message: {response.status_code}, {response.text}")
 
 
