@@ -12,6 +12,7 @@ log = LoggingMixin().log
 
 MEL_APROVACAO_DATASET = Dataset("melhorias://bronze/melhoria_aprovacao")
 MEL_GANHOS_DATASET = Dataset("melhorias://bronze/melhoria_ganhos")
+MEL_DATA_FAP_DATASET = Dataset("melhorias://silver/data_fap")
 
 
 @task
@@ -40,6 +41,6 @@ with DAG(
     tags=["melhorias", "bronze"],
 ) as dag:
     start = EmptyOperator(task_id="start")
-    end = EmptyOperator(task_id="end")
+    end = EmptyOperator(task_id="end", outlets=[MEL_DATA_FAP_DATASET])
 
     _ = start >> update_dt_fap() >> end
