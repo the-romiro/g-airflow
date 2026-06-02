@@ -26,7 +26,7 @@ Elipse source data comes from three establishments:
 | `CX_FLAKEFLOW_CONN` | ConnectorX connection to Flakeflow source |
 | `DDB_PG_CONN` | DuckDB ATTACH string for engineering Postgres |
 | `DDB_PG_FLAKEFLOW_CONN` | DuckDB ATTACH string for Flakeflow Postgres |
-| `ENG_DATABASE_URL` | SQLAlchemy URL for engineering Postgres |
+| `ENG_DATABASE_URL` | SQLAlchemy URL for engineering SQL Server (dbengenharia) |
 | `WEBHOOK_TEAMS` | MS Teams webhook URL for failure alerts |
 | `SILVER_F_CICLOS_DAYS_TO_SEARCH` | Integer lookback window for ciclos pipeline |
 | `SHAREPOINT_SITE_URL` | SharePoint site URL (`https://contoso.sharepoint.com/sites/nome`) |

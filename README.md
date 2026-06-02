@@ -145,7 +145,7 @@ As seguintes variáveis precisam estar cadastradas no Airflow antes de executar 
 | `CX_FLAKEFLOW_CONN`              | Connection string ConnectorX — Flakeflow             |
 | `DDB_PG_CONN`                    | String de attach DuckDB → PostgreSQL Engenharia      |
 | `DDB_PG_FLAKEFLOW_CONN`          | String de attach DuckDB → PostgreSQL Flakeflow       |
-| `ENG_DATABASE_URL`               | SQLAlchemy URL — PostgreSQL Engenharia               |
+| `ENG_DATABASE_URL`               | SQLAlchemy URL — SQL Server Engenharia (dbengenharia) |
 | `WEBHOOK_TEAMS`                  | URL do webhook para notificações de falha no Teams   |
 | `SILVER_F_CICLOS_DAYS_TO_SEARCH` | Janela de busca em dias para o pipeline de ciclos    |
 
