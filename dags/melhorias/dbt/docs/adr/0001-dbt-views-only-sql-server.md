@@ -1,3 +1,5 @@
+# ADR = Architecture Decision Record.
+
 # 0001 — dbt views-only sobre SQL Server (dbo), Power BI em import
 
 - Status: aceito

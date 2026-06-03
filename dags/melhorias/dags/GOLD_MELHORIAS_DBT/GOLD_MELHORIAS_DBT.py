@@ -56,7 +56,23 @@ def _run_dbt(command: list[str]) -> None:
         str(DBT_PROJECT_DIR),
     ]
     log.info(f"[dbt] {' '.join(command)}")
-    subprocess.run(full, env=env, check=True)  # noqa: S603
+    # Streama o stdout/stderr do dbt linha a linha pro logger do Airflow (aparece ao
+    # vivo no log da task). subprocess.run nao capturava o fd do subprocesso, entao o
+    # output do dbt nao entrava no task log.
+    process = subprocess.Popen(  # noqa: S603
+        full,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    assert process.stdout is not None
+    for line in process.stdout:
+        log.info(line.rstrip())
+    returncode = process.wait()
+    if returncode != 0:
+        raise subprocess.CalledProcessError(returncode, full)
 
 
 @task

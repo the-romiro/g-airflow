@@ -1,3 +1,5 @@
+# ADR = Architecture Decision Record.
+
 # 0002 — Conexão dbt via ENG_DATABASE_URL (Airflow Variable → env_var)
 
 - Status: aceito

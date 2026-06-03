@@ -4,6 +4,11 @@ config-version: 2
 
 profile: "melhorias"
 
+# Logs do dbt vao pro stdout (capturado no log da task do Airflow); 'none' desliga a
+# escrita de logs/dbt.log.
+flags:
+  log_level_file: none
+
 model-paths: ["models"]
 seed-paths: ["seeds"]
 macro-paths: ["macros"]

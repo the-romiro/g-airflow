@@ -2,6 +2,7 @@
 
 Glossário do domínio de Melhorias (Indicador de Melhorias / Aderência / Ganhos).
 Apenas termos de negócio. Decisões de implementação vão em `docs/adr/`.
+Linhagem dos dados (diagramas Mermaid source → marts): [`docs/lineage.md`](lineage.md).
 
 ## Termos
 

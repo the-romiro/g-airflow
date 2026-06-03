@@ -1,3 +1,5 @@
+# ADR = Architecture Decision Record.
+
 # 0003 — Contrato gold: ganhos long, dt_fap mestra, só aprovadas
 
 - Status: aceito
