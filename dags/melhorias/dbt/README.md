@@ -29,10 +29,11 @@ dbt build --profiles-dir .
 ## Modelo central (meta_aderencia)
 
 `mel_meta_aderencia` é a tabela central (grão `bimestre, crachá`). O realizado de
-melhorias vem dos ganhos: **melhoria = `numero_fap` com `ganho_reais > 0` E
-`replicacao = 'Não'`** (`int_melhorias_realizado`). `fct_aderencia` cruza meta x
-realizado e responde, por idealizador/bimestre: quantas melhorias fez, foi aderente,
-ganhou quanto.
+melhorias vem dos ganhos: **melhoria = `numero_fap` com `ganho_fap >= 0` E
+`replicacao = 'Não'`** (`int_melhorias_realizado`). Já o `ganho_total` soma **todos**
+os ganhos por FAP do idealizador/bimestre, independente de replicacao/sinal (não usa o
+filtro da contagem). `fct_aderencia` cruza meta x realizado e responde, por
+idealizador/bimestre: quantas melhorias fez, foi aderente, ganhou quanto.
 
 Bimestre canônico em todo o modelo: `'mes1-mes2/ano'` (ex. `jan-fev/2026`), derivado
 de `dt_fap` (ganhos/aprovacao) ou `inicio_bimestre` (meta) via seed `mel_bimestre`.

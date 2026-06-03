@@ -28,8 +28,10 @@ Meta" em aderência), e melhorias em andamento eram jogadas no mês atual via
    reconstrói histórico estável.
 4. **Meta central + melhoria via ganhos** — `mel_meta_aderencia` é a tabela central
    (grão `bimestre, crachá`). O realizado de aderência **não** é mais contagem de
-   aprovadas: melhoria = `numero_fap` com `ganho_reais > 0` E `replicacao = 'Não'`
-   (`int_melhorias_realizado`). Bimestre canônico `'mes1-mes2/ano'`.
+   aprovadas: melhoria (quantidade) = `numero_fap` com `ganho_fap >= 0` E
+   `replicacao = 'Não'`; `ganho_total` soma todos os FAPs do idealizador/bimestre
+   independente de replicacao/sinal (`int_melhorias_realizado`). Bimestre canônico
+   `'mes1-mes2/ano'`.
 
 ## Consequências
 

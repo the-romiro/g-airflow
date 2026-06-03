@@ -25,7 +25,7 @@ como VIEW (ver `adr/0001`).
 | Remap gerente | seed com `valido_ate` + join janela de data (não CASE no SQL) | — |
 | Data mestra | `dt_fap` (aprovacao deriva de `dt_aprovacao_eng`; ganhos usa `dt_fap` nativo de `mel_ganhos`) | adr/0003 |
 | Tabela central | `mel_meta_aderencia` (grão `bimestre, crachá`); realizado = melhorias via ganhos | — |
-| Melhoria | `numero_fap` com `ganho_reais > 0` E `replicacao = 'Não'` | — |
+| Melhoria | quantidade: `numero_fap` com `ganho_fap >= 0` E `replicacao = 'Não'`; `ganho_total` soma todos os FAPs (sem filtro) | — |
 | Ganho R$ | TC/Aglutinação calculado (`hrs/ch*custo`); Consumo/Troca somados; demais = `ganho_previsto` | qlik |
 | Bimestre | `'mes1-mes2/ano'` (ex. `jan-fev/2026`) via seed `mel_bimestre` | — |
 | Collation | `mel_ganhos` Latin1 × planilha/seeds UTF8: joins de string com `collate database_default` | adr/0003 |
