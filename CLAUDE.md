@@ -31,7 +31,14 @@ uv sync --group dev
 
 ## Architecture
 
-CeleryExecutor + Redis + PostgreSQL, via Docker Compose (`docker-compose.yml`). Custom image (`Dockerfile`) on `apache/airflow:2.10.5` with MS SQL Server ODBC drivers (`msodbcsql17`) and TLS downgrade (`openssl.cnf`) for SQL Server 2008. Timezone: `America/Fortaleza`. UI: `http://localhost:8080`.
+CeleryExecutor + Redis + PostgreSQL, via Docker Compose (`docker-compose.yml`). Custom image (`Dockerfile`) on `apache/airflow:2.10.5` with MS SQL Server ODBC drivers (`msodbcsql17`) and TLS downgrade (`openssl.cnf`). Timezone: `America/Fortaleza`. UI: `http://localhost:8080`.
+
+### SQL Server topology (versions differ per database)
+
+| Database(s) | Version | Notes |
+|---|---|---|
+| `dbengenharia` | SQL Server **2019** Standard (15.0.4261.1) | dbt melhorias views target; has batch mode + columnstore |
+| `elipse`, `sob`, `for`, `cra` | SQL Server **2008 R2 SP3** Standard (10.50.6529.0) | Legacy sources; require the `openssl.cnf` TLS downgrade (SECLEVEL=0) for ODBC Driver 17 to connect — this config is NOT dead. No batch mode/columnstore. |
 
 DAGs implement **Bronze → Silver → Gold** medallion architecture for **SiMOn** (Sistema de Monitoramento Online):
 
