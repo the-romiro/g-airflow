@@ -84,12 +84,14 @@ elegível e `Categoria Situação` = 'Considera'.
 
 Duas origens, conforme a natureza do dado:
 
-- **Seeds dbt** (CSV versionado no repo, estático/quase-estático):
-  `gerentes` (remap + área), `categoria_das_melhorias` (tipo→categoria),
-  `bimestre` (mês→bimestre). dbt cria a tabela via `dbt seed`.
-- **Sources ingeridas por DAG Airflow** (operacional, periódico):
+- **Seeds dbt** (CSV versionado no repo, estático/quase-estático; tabelas com
+  prefixo `mel_`): `mel_gerente_remap` + `mel_gerente_area` (remap + área),
+  `mel_categoria_melhorias` (tipo→categoria), `mel_bimestre` (mês→bimestre).
+  dbt cria a tabela via `dbt seed`.
+- **Sources populadas via planilha + VBA** (direto no SQL Server, sem DAG):
   `mel_meta_aderencia` (por bimestre), `mel_carga_horaria` (mensal),
-  `mel_custo_funcionario` (mensal). Vêm de planilha/SharePoint como o bronze.
+  `mel_custo_funcionario` (mensal). O negócio mantém via planilha/VBA; dbt só as
+  declara como `sources` e lê.
 
 A primeira entrega (decisão: tudo de uma vez — 3 fatos + dims) **depende** das
 aux populadas; o `dbt build` só fecha com seeds carregadas e sources ingeridas.

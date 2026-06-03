@@ -5,7 +5,6 @@ import connectorx as cx
 import duckdb as ddb
 from airflow.decorators import dag, task
 from airflow.utils.log.logging_mixin import LoggingMixin
-
 from global_modules.database import get_cx_conn, get_duckdb_conn
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.utils import get_parquet_file, get_sentinel_file, read_sql_file

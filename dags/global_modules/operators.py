@@ -7,7 +7,6 @@ from airflow.exceptions import AirflowException
 from airflow.models import BaseOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-
 from global_modules.sqlserver_hook import SqlServerHook
 
 

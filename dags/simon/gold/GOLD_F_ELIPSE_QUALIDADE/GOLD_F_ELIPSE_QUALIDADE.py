@@ -3,7 +3,6 @@ from datetime import datetime
 from airflow import DAG
 from airflow.datasets import Dataset
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
-
 from global_modules.ms_teams import notify_teams_on_failure
 
 default_args = {

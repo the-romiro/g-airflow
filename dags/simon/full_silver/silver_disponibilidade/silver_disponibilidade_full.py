@@ -9,9 +9,8 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.task_group import TaskGroup
-from sqlalchemy import create_engine
-
 from global_modules.ms_teams import notify_teams_on_failure
+from sqlalchemy import create_engine
 
 server = "prod"
 DB = "elipsedev" if server == "dev" else "elipse"

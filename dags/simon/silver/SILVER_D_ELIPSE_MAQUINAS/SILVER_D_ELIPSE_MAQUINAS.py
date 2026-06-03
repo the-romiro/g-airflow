@@ -9,7 +9,6 @@ from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 DS_CADASTROS_MAQUINAS = Dataset("elipse://silver/cadastros_maquinas")
 from airflow.utils.log.logging_mixin import LoggingMixin
-
 from global_modules.database import Estabelecimento, get_cx_conn, get_duckdb_conn, get_estab_code
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.utils import get_parquet_file, get_sentinel_file, read_sql_file

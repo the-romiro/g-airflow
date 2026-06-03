@@ -1,0 +1,31 @@
+name: "melhorias"
+version: "1.0.0"
+config-version: 2
+
+profile: "melhorias"
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# ADR 0001: tudo materializado como VIEW em dbo (limite de 10GB, Power BI import).
+models:
+  melhorias:
+    +materialized: view
+    +schema: dbo
+    staging:
+      +tags: ["staging"]
+    intermediate:
+      +tags: ["intermediate"]
+    marts:
+      +tags: ["marts"]
+
+seeds:
+  melhorias:
+    +schema: dbo

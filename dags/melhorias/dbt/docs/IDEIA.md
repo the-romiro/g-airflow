@@ -21,7 +21,7 @@ como VIEW (ver `adr/0001`).
 |---|---|---|
 | Conexão | `ENG_DATABASE_URL` (SQL Server) → DAG `make_url` → env vars → `profiles.yml` `env_var()` | adr/0002 |
 | Escopo 1ª entrega | tudo de uma vez: 3 fatos + dims + aux | — |
-| Aux | seeds (`gerente_remap`, `gerente_area`, `categoria`, `bimestre`) + sources ingeridas por DAG (`mel_meta_aderencia`, `mel_carga_horaria`, `mel_custo_funcionario`) | CONTEXT |
+| Aux | seeds (`mel_gerente_remap`, `mel_gerente_area`, `mel_categoria_melhorias`, `mel_bimestre`) + sources populadas via planilha+VBA (`mel_meta_aderencia`, `mel_carga_horaria`, `mel_custo_funcionario`) — sem DAG de ingestão | CONTEXT |
 | Remap gerente | seed com `valido_ate` + join janela de data (não CASE no SQL) | — |
 | Data mestra | `dt_fap` (deriva de `dt_aprovacao_eng`), link único do `dim_calendario` | adr/0003 |
 | Em andamento | fato separado `fct_melhorias_em_andamento`; fatos principais só aprovadas | adr/0003 |
@@ -54,11 +54,11 @@ marts/   (gold, VIEW, Power BI import)
   fct_meta
   fct_melhorias_em_andamento
 
-seeds/
-  gerente_remap.csv        # origem, destino, valido_ate
-  gerente_area.csv         # gerente, area
-  categoria_melhorias.csv  # tipo, categoria
-  bimestre.csv             # mes, bimestre
+seeds/   (tabelas com prefixo mel_)
+  mel_gerente_remap.csv        # origem, destino, valido_ate
+  mel_gerente_area.csv         # gerente, area
+  mel_categoria_melhorias.csv  # tipo, categoria
+  mel_bimestre.csv             # mes, bimestre
 ```
 
 ## Orquestração
@@ -69,6 +69,9 @@ bronze, emitindo o Dataset gold (ver `adr/0001`). Aposenta a DAG
 
 ## Pendências de implementação
 
-- DDL/source de `gerentes` e `categoria_das_melhorias` viram seed (não precisam DDL).
+- `gerentes` e `categoria_das_melhorias` viram seed (não precisam DDL).
+- `mel_meta_aderencia`, `mel_carga_horaria`, `mel_custo_funcionario`: populadas
+  pelo negócio via planilha + VBA direto no SQL Server. Não há DAG de ingestão; o
+  dbt depende delas existirem antes do `dbt build`.
 - Reconciliar `ganho em reais` calculado vs `[R$ Mês TC]` da planilha (Qlik guardava ambos).
 - Testes dbt mínimos: `unique`/`not_null` nas chaves, `relationships` fato→dim.

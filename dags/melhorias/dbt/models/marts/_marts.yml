@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: dim_calendario
+    columns:
+      - name: data
+        data_tests: [unique, not_null]
+
+  - name: dim_idealizador
+    columns:
+      - name: cracha_idealizador
+        data_tests: [not_null]
+
+  - name: fct_ganhos
+    columns:
+      - name: dt_competencia
+        data_tests: [not_null]
+      - name: mes_offset
+        data_tests:
+          - accepted_values:
+              values: [1, 2, 3, 4]
+
+  - name: fct_aderencia
+    columns:
+      - name: cracha_idealizador
+        data_tests: [not_null]
+      - name: bimestre
+        data_tests: [not_null]
+
+  - name: fct_melhorias_em_andamento
+    columns:
+      - name: id
+        data_tests: [unique, not_null]

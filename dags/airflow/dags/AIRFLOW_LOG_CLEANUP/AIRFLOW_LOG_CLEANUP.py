@@ -5,7 +5,6 @@ from pathlib import Path
 from airflow.configuration import conf
 from airflow.decorators import dag, task
 from airflow.utils.log.logging_mixin import LoggingMixin
-
 from global_modules.ms_teams import notify_teams_on_failure
 
 log = LoggingMixin().log

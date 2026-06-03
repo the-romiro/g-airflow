@@ -1,0 +1,31 @@
+version: 2
+
+seeds:
+  - name: mel_gerente_remap
+    description: >
+      Remap de gerente (cadeia if do Qlik). origem -> destino, com valido_ate
+      opcional: a regra só vale quando inicio_bimestre < valido_ate
+      (nulo = sempre). Fall-through: sem match, mantém a origem.
+    config:
+      column_types:
+        origem: varchar(100)
+        destino: varchar(100)
+        valido_ate: date
+  - name: mel_gerente_area
+    description: "Lookup de área pelo nome do gerente já ajustado (planilha gerentes)."
+    config:
+      column_types:
+        gerente: varchar(100)
+        area: varchar(100)
+  - name: mel_categoria_melhorias
+    description: "Mapa Tipo de Melhoria -> Categoria das melhorias (planilha)."
+    config:
+      column_types:
+        tipo_melhoria: varchar(100)
+        categoria: varchar(100)
+  - name: mel_bimestre
+    description: "Mapa mês (1-12) -> bimestre (jan-fev .. nov-dez)."
+    config:
+      column_types:
+        mes: int
+        bimestre: varchar(20)

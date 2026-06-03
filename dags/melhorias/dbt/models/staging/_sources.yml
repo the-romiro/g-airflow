@@ -1,0 +1,32 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: dbengenharia
+    schema: dbo
+    description: "Bronze imutável ingerido das listas SharePoint pelas DAGs Airflow."
+    tables:
+      - name: mel_aprovacao
+        description: "Fluxo de aprovação/assinatura das melhorias (FAP/FAO)."
+        loaded_at_field: Modified
+        freshness:
+          warn_after: { count: 2, period: day }
+          error_after: { count: 7, period: day }
+      - name: mel_ganhos
+        description: "Ganhos das melhorias (TC, consumo, troca MP, outros)."
+        loaded_at_field: Modified
+        freshness:
+          warn_after: { count: 2, period: day }
+          error_after: { count: 7, period: day }
+
+  - name: aux
+    database: dbengenharia
+    schema: dbo
+    description: "Tabelas auxiliares operacionais populadas via planilha + VBA (sem DAG)."
+    tables:
+      - name: mel_meta_aderencia
+        description: "Meta por gerente/bimestre + roster RH elegível."
+      - name: mel_carga_horaria
+        description: "Carga horária mensal por setor."
+      - name: mel_custo_funcionario
+        description: "Custo do funcionário mensal por estabelecimento."

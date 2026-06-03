@@ -4,10 +4,9 @@ import pandas as pd
 from airflow.decorators import dag, task
 from airflow.providers.microsoft.mssql.hooks.mssql import MsSqlHook
 from airflow.utils.log.logging_mixin import LoggingMixin
-from sqlalchemy import text
-
 from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.utils import read_sql_file
+from sqlalchemy import text
 
 log = LoggingMixin().log
 

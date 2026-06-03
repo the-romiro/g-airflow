@@ -6,14 +6,11 @@ import duckdb as ddb
 from airflow.decorators import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
-from sqlalchemy import text
-
 from global_modules.database import (
     Estabelecimento,
     get_ciclos_search_window,
     get_cx_conn,
     get_duckdb_conn,
-    get_eng_conn,
     get_estab_code,
 )
 from global_modules.ms_teams import notify_teams_on_failure

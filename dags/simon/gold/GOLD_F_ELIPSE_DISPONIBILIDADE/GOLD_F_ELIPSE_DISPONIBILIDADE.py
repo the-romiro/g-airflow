@@ -1,14 +1,13 @@
 from datetime import datetime, timedelta
 
 import duckdb as ddb
-from global_modules.database import get_duckdb_conn
-from global_modules.ms_teams import notify_teams_on_failure
-from global_modules.utils import read_sql_file
-
 from airflow.datasets import Dataset
 from airflow.decorators import dag, task
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
+from global_modules.database import get_duckdb_conn
+from global_modules.ms_teams import notify_teams_on_failure
+from global_modules.utils import read_sql_file
 
 log = LoggingMixin().log
 
