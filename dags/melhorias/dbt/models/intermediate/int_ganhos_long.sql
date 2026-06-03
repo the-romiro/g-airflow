@@ -8,7 +8,7 @@
 --
 -- Período da conversão = mês de dt_fap (Qlik usa a Data da FAP para os 4 meses).
 -- Chaves (assunção a validar vs Qlik):
---   carga_horaria  por (macro_setor = [Setor Macro], mês de dt_fap)
+--   carga_horaria  por (setor = [Setor], mês de dt_fap)
 --   custo_funcionario por (filial = [Estab.], mês de dt_fap)
 
 with calc as (
@@ -39,10 +39,10 @@ calc_aux as (
         ch.ch_mensal,
         cu.custo
     from calc as c
-    -- COLLATE DATABASE_DEFAULT: mel_ganhos (macro_setor/filial) e Latin1_General_CI_AS;
+    -- COLLATE DATABASE_DEFAULT: mel_ganhos (setor/filial) e Latin1_General_CI_AS;
     -- carga/custo (planilha/VBA) sao UTF8. Sem isto o join de string estoura collation.
     left join carga as ch
-        on c.macro_setor collate database_default = ch.setor collate database_default
+        on c.setor collate database_default = ch.setor collate database_default
         and year(c.dt_fap) = ch.ano
         and month(c.dt_fap) = ch.mes_num
     left join custo as cu

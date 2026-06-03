@@ -61,7 +61,7 @@ idealizador por bimestre. Chave equivalente ao `%ChaveCodigoBimestre` do Qlik.
 ### Bimestre
 Grão temporal central. 6 bimestres/ano (jan-fev, mar-abr, …, nov-dez).
 Identificado como `'mes1-mes2/ano'` (ex. `jan-fev/2026`) — formato do Qlik. Derivado
-da data via seed `mel_bimestre`: `month(data) → mel_bimestre.bimestre`, concatenado
+da data via tabela `mel_bimestre`: `month(data) → mel_bimestre.bimestre`, concatenado
 com o ano. Vem de `dt_fap` (ganhos/aprovacao) ou `inicio_bimestre` (meta). Não há
 mais "bimestre corrente" pinado por config — gold reconstrói todo histórico; Power BI fatia.
 
@@ -85,16 +85,17 @@ elegível e `Categoria Situação` = 'Considera'.
 
 ## Tabelas auxiliares
 
-Duas origens, conforme a natureza do dado:
+Todas carregadas manualmente no SQL Server (sem DAG); o dbt só as lê. Dois grupos:
 
-- **Seeds dbt** (CSV versionado no repo, estático/quase-estático; tabelas com
-  prefixo `mel_`): `mel_gerente_remap` + `mel_gerente_area` (remap + área),
-  `mel_categoria_melhorias` (tipo→categoria), `mel_bimestre` (mês→bimestre).
-  dbt cria a tabela via `dbt seed`.
-- **Sources populadas via planilha + VBA** (direto no SQL Server, sem DAG):
-  `mel_meta_aderencia` (por bimestre), `mel_carga_horaria` (mensal),
-  `mel_custo_funcionario` (mensal). O negócio mantém via planilha/VBA; dbt só as
-  declara como `sources` e lê.
+- **Mapeamentos estáticos** (CSV versionado em `seeds/` como referência/contrato de
+  schema; tabelas com prefixo `mel_`): `mel_gerente_remap` + `mel_gerente_area`
+  (remap + área), `mel_categoria_melhorias` (tipo→categoria), `mel_bimestre`
+  (mês→bimestre). **Não** são mais carregados via `dbt seed`: as tabelas `dbo.mel_*`
+  são criadas/populadas à mão (DBeaver/SQL). Os `ref()` dos models resolvem para essas
+  tabelas; o build roda com `--exclude resource_type:seed`. Ver `adr/0004`.
+- **Populadas via planilha + VBA** (direto no SQL Server): `mel_meta_aderencia` (por
+  bimestre), `mel_carga_horaria` (mensal), `mel_custo_funcionario` (mensal). O negócio
+  mantém via planilha/VBA; dbt só as declara como `sources` e lê.
 
 A primeira entrega (decisão: tudo de uma vez — 3 fatos + dims) **depende** das
-aux populadas; o `dbt build` só fecha com seeds carregadas e sources ingeridas.
+aux populadas; o `dbt build` só fecha com as tabelas auxiliares e as sources ingeridas.

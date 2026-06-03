@@ -1,8 +1,12 @@
-"""Orquestra o dbt de Melhorias (seed + build).
+"""Orquestra o dbt de Melhorias (deps + build).
 
 Disparada pelos Datasets bronze (aprovacao + ganhos), roda o dbt CLI sobre o
 projeto em melhorias/dbt e emite o Dataset gold. Credencial vem da Airflow
 Variable ENG_DATABASE_URL, quebrada em env vars DBT_* (ADR 0002).
+
+O seed deixou de ser rodado pelo dbt: as tabelas mel_* auxiliares são carregadas
+manualmente no SQL Server via DBeaver/SQL (ADR 0004). Por isso a task dbt_seed
+está comentada e o build roda com --exclude resource_type:seed.
 """
 
 import os
@@ -80,14 +84,21 @@ def dbt_deps():
     _run_dbt(["deps"])
 
 
-@task
-def dbt_seed():
-    _run_dbt(["seed"])
+# Seed desativado: as tabelas mel_* auxiliares passam a ser carregadas manualmente
+# no SQL Server via DBeaver/SQL (ADR 0004). Os CSVs e o _seeds.yml continuam no
+# projeto só como contrato de schema; os ref() resolvem para as tabelas dbo.mel_*
+# criadas a mao. Reabilitar a task abaixo (e tirar o --exclude do build) caso o
+# seed volte a ser gerenciado pelo dbt.
+# @task
+# def dbt_seed():
+#     _run_dbt(["seed"])
 
 
 @task(outlets=[MEL_GOLD_DATASET])
 def dbt_build():
-    _run_dbt(["build"])
+    # --exclude resource_type:seed: dbt build roda seed por padrao; excluimos para
+    # nao recarregar os CSVs (seed agora e manual, ADR 0004).
+    _run_dbt(["build", "--exclude", "resource_type:seed"])
 
 
 default_args = {
@@ -110,4 +121,5 @@ with DAG(
 ) as dag:
     start = EmptyOperator(task_id="start")
     end = EmptyOperator(task_id="end")
-    _ = start >> dbt_deps() >> dbt_seed() >> dbt_build() >> end
+    # dbt_seed() removido da cadeia (seed manual no SQL Server, ADR 0004).
+    _ = start >> dbt_deps() >> dbt_build() >> end

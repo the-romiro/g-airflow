@@ -31,6 +31,10 @@ models:
     marts:
       +tags: ["marts"]
 
-seeds:
-  melhorias:
-    +schema: dbo
+# Seed desativado: tabelas mel_* carregadas manualmente no SQL Server (ADR 0004).
+# Config mantida comentada como referencia. NAO usar +enabled: false aqui: os models
+# referenciam os seeds via ref() e isso quebraria o parse; os nos seguem habilitados
+# para resolucao de ref(), o build apenas os exclui (--exclude resource_type:seed).
+# seeds:
+#   melhorias:
+#     +schema: dbo

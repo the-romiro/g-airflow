@@ -195,6 +195,10 @@ Ver ADR 0002 (conexão eng via env var).
 
 ## Seeds
 
+Carregados manualmente no SQL Server (DBeaver/SQL), não via `dbt seed`. Os CSVs em
+`seeds/` ficam só como referência/contrato de schema; os `ref()` resolvem para as
+tabelas `dbo.mel_*` criadas à mão. Ver ADR 0004.
+
 | Seed | Descrição |
 |---|---|
 | mel_bimestre | Mapa mês (1-12) → bimestre (jan-fev .. nov-dez). |
