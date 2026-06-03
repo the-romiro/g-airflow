@@ -8,9 +8,8 @@ select
     month(date_day) as mes,
     day(date_day) as dia,
     (month(date_day) + 1) / 2 as bimestre_num,
-    cast(year(date_day) as varchar(4)) + '_Bimestre_'
-        + cast(((month(date_day) + 1) / 2) as varchar(2)) as bimestre,
-    b.bimestre as bimestre_label
+    -- bimestre canônico 'mes1-mes2/ano' (ex. jan-fev/2026), igual aos fatos
+    b.bimestre + '/' + cast(year(date_day) as varchar(4)) as bimestre
 from {{ ref('int_calendario_spine') }} as dias
 left join {{ ref('mel_bimestre') }} as b
     on month(dias.date_day) = b.mes

@@ -59,8 +59,10 @@ idealizador por bimestre. Chave equivalente ao `%ChaveCodigoBimestre` do Qlik.
 
 ### Bimestre
 Grão temporal central. 6 bimestres/ano (jan-fev, mar-abr, …, nov-dez).
-Identificado como `<ano>_Bimestre_<n>`. Derivado da data (não há mais "bimestre
-corrente" pinado por config — gold reconstrói todo histórico; Power BI fatia).
+Identificado como `'mes1-mes2/ano'` (ex. `jan-fev/2026`) — formato do Qlik. Derivado
+da data via seed `mel_bimestre`: `month(data) → mel_bimestre.bimestre`, concatenado
+com o ano. Vem de `dt_fap` (ganhos/aprovacao) ou `inicio_bimestre` (meta). Não há
+mais "bimestre corrente" pinado por config — gold reconstrói todo histórico; Power BI fatia.
 
 ### Gerente
 Responsável por uma área. Sofre **remapeamento** (Qlik tinha cadeia de if's:

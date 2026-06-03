@@ -23,7 +23,12 @@ como VIEW (ver `adr/0001`).
 | Escopo 1ª entrega | tudo de uma vez: 3 fatos + dims + aux | — |
 | Aux | seeds (`mel_gerente_remap`, `mel_gerente_area`, `mel_categoria_melhorias`, `mel_bimestre`) + sources populadas via planilha+VBA (`mel_meta_aderencia`, `mel_carga_horaria`, `mel_custo_funcionario`) — sem DAG de ingestão | CONTEXT |
 | Remap gerente | seed com `valido_ate` + join janela de data (não CASE no SQL) | — |
-| Data mestra | `dt_fap` (deriva de `dt_aprovacao_eng`), link único do `dim_calendario` | adr/0003 |
+| Data mestra | `dt_fap` (aprovacao deriva de `dt_aprovacao_eng`; ganhos usa `dt_fap` nativo de `mel_ganhos`) | adr/0003 |
+| Tabela central | `mel_meta_aderencia` (grão `bimestre, crachá`); realizado = melhorias via ganhos | — |
+| Melhoria | `numero_fap` com `ganho_reais > 0` E `replicacao = 'Não'` | — |
+| Ganho R$ | TC/Aglutinação calculado (`hrs/ch*custo`); Consumo/Troca somados; demais = `ganho_previsto` | qlik |
+| Bimestre | `'mes1-mes2/ano'` (ex. `jan-fev/2026`) via seed `mel_bimestre` | — |
+| Collation | `mel_ganhos` Latin1 × planilha/seeds UTF8: joins de string com `collate database_default` | adr/0003 |
 | Em andamento | fato separado `fct_melhorias_em_andamento`; fatos principais só aprovadas | adr/0003 |
 | Grão ganhos | long/unpivot (FAP × mês 1..4) | adr/0003 |
 | Local projeto | `dags/melhorias/dbt/` + `.airflowignore` | — |
@@ -41,8 +46,9 @@ staging/   (view 1:1, limpeza sobre source/seed)
 
 intermediate/   (regra de negócio)
   int_gerente_remap        # remap (seed + janela data) + área
-  int_ganhos_calc          # hrs ganhas, consumo, troca MP, R$ trabalhista; dt_fap ganhos (join)
-  int_aderencia_realizado  # realizado por idealizador/gerente/bimestre
+  int_ganhos_calc          # componentes wide: hrs ganhas, consumo, troca MP (dt_fap nativo de mel_ganhos)
+  int_ganhos_long          # unpivot 1..4 + ganho_reais por tipo (R$ trabalhista/consumo/troca/previsto)
+  int_melhorias_realizado  # realizado por (bimestre, crachá): melhoria = ganho_reais>0 e replicacao='Não'
 
 marts/   (gold, VIEW, Power BI import)
   dim_calendario
@@ -74,4 +80,5 @@ bronze, emitindo o Dataset gold (ver `adr/0001`). Aposenta a DAG
   pelo negócio via planilha + VBA direto no SQL Server. Não há DAG de ingestão; o
   dbt depende delas existirem antes do `dbt build`.
 - Reconciliar `ganho em reais` calculado vs `[R$ Mês TC]` da planilha (Qlik guardava ambos).
-- Testes dbt mínimos: `unique`/`not_null` nas chaves, `relationships` fato→dim.
+- Testes dbt mínimos (`unique`/`not_null`/`accepted_values`) já no build verde; falta
+  `relationships` fato→dim.
