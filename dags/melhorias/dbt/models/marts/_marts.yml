@@ -2,32 +2,225 @@ version: 2
 
 models:
   - name: dim_calendario
+    description: >
+      Calendário diário (date spine 2020-01-01 .. getdate()+1ano). Liga os fatos
+      por dt_fap / dt_competencia (ADR 0003). Bimestre canônico 'mes1-mes2/ano'.
     columns:
       - name: data
+        description: "Data (grão diário). PK da dimensão."
         data_tests: [unique, not_null]
+      - name: ano
+        description: "Ano da data."
+      - name: mes
+        description: "Mês (1-12) da data."
+      - name: dia
+        description: "Dia do mês (1-31)."
+      - name: bimestre_num
+        description: "Número do bimestre (1-6), ceil(mes/2)."
+        data_tests:
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6]
+      - name: bimestre
+        description: "Bimestre canônico textual 'mes1-mes2/ano' (ex. jan-fev/2026)."
+
+  - name: dim_gerente
+    description: >
+      Dimensão de gerente já remapeado (int_gerente_remap) + área. PK: gerente.
+    columns:
+      - name: gerente
+        description: "Nome do gerente ajustado (pós-remap). PK da dimensão."
+        data_tests: [unique, not_null]
+      - name: area
+        description: "Área do gerente (lookup seed mel_gerente_area)."
 
   - name: dim_idealizador
+    description: >
+      Dimensão de idealizador no grão (bimestre, crachá): atributos variam por
+      bimestre (cargo, gerente, elegibilidade). Fonte: roster da meta.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [bimestre, cracha_idealizador]
     columns:
+      - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano'. Parte da PK composta."
+        data_tests: [not_null]
       - name: cracha_idealizador
+        description: "Crachá (código RH) do idealizador. Parte da PK composta."
+        data_tests: [not_null]
+      - name: nome_idealizador
+        description: "Nome do idealizador."
+      - name: cargo
+        description: "Cargo no bimestre."
+      - name: grupo_cargo
+        description: "Grupo de cargo (usado na regra de elegibilidade)."
+      - name: setor
+        description: "Setor do idealizador."
+      - name: gerente_meta
+        description: "Gerente responsável pela meta do idealizador."
+      - name: elegivel
+        description: "Flag (bit) de elegibilidade para a meta de melhorias."
+
+  - name: dim_tipo_melhoria
+    description: >
+      Dimensão de tipo de melhoria + categoria (seed mel_categoria_melhorias).
+    columns:
+      - name: tipo_melhoria
+        description: "Tipo da melhoria (TC, Consumo, Troca MP, Aglutinação, etc.). PK."
+        data_tests: [unique, not_null]
+      - name: categoria
+        description: "Categoria agregadora do tipo."
         data_tests: [not_null]
 
   - name: fct_ganhos
+    description: >
+      Fato de ganhos LONG: uma linha por (FAP, mês de competência 1..4), ganho_reais
+      convertido por tipo (ADR 0003). Componentes colapsados via group by + sum.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [numero_fap, mes_offset]
     columns:
-      - name: dt_competencia
+      - name: numero_fap
+        description: "Número da FAP (Ficha de Aprovação). Parte da PK."
         data_tests: [not_null]
+      - name: id_solicitacao_assinatura
+        description: "ID da solicitação de assinatura no fluxo de aprovação."
+      - name: tipo_melhoria
+        description: "Tipo da melhoria."
+        data_tests:
+          - relationships:
+              to: ref('dim_tipo_melhoria')
+              field: tipo_melhoria
+              config:
+                severity: warn
+      - name: filial
+        description: "Filial/estabelecimento da melhoria."
+      - name: setor
+        description: "Setor da melhoria."
+      - name: macro_setor
+        description: "Macro setor agregador."
+      - name: cracha_idealizador
+        description: "Crachá do idealizador."
+        data_tests:
+          - relationships:
+              to: ref('dim_idealizador')
+              field: cracha_idealizador
+              config:
+                severity: warn
+      - name: nome_idealizador
+        description: "Nome do idealizador."
+      - name: gerente_idealizador
+        description: "Gerente do idealizador."
+      - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano' derivado de dt_fap."
+      - name: replicacao
+        description: "Indica se a FAP é replicação ('Não' = melhoria original)."
       - name: mes_offset
+        description: "Mês de competência relativo ao dt_fap (1..4)."
         data_tests:
           - accepted_values:
               values: [1, 2, 3, 4]
+      - name: dt_competencia
+        description: "Data de competência do mês (dt_fap + mes_offset-1 meses)."
+        data_tests: [not_null]
+      - name: hrs_ganhas
+        description: "Horas ganhas no mês (TC/Aglutinação). Pode ser negativo (piora)."
+      - name: ganho_reais
+        description: "Ganho em R$ no mês, convertido por tipo. Pode ser negativo."
 
   - name: fct_aderencia
+    description: >
+      Fato de aderência: meta (roster elegível) x realizado. Grão (bimestre, crachá).
+      Responde quantas melhorias o idealizador fez e se atingiu a meta no bimestre.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [bimestre, cracha_idealizador]
     columns:
-      - name: cracha_idealizador
-        data_tests: [not_null]
       - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano'. Parte da PK."
         data_tests: [not_null]
+      - name: cracha_idealizador
+        description: "Crachá do idealizador. Parte da PK."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_idealizador')
+              field: cracha_idealizador
+              config:
+                severity: warn
+      - name: gerente_meta
+        description: "Gerente responsável pela meta."
+      - name: meta_qtde
+        description: "Meta de melhorias do idealizador no bimestre."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: realizado_qtde
+        description: "Quantidade de melhorias realizadas (não-replicação, ganho >= 0)."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: ganho_total
+        description: "Soma de todos os ganhos do idealizador no bimestre (R$)."
+      - name: atingiu_meta
+        description: "Flag (bit): realizado_qtde >= meta_qtde e meta > 0."
+      - name: elegivel
+        description: "Flag (bit) de elegibilidade do idealizador."
+
+  - name: fct_meta
+    description: >
+      Fato de meta: alvo por gerente/bimestre (roster elegível). Grão (bimestre, crachá).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [bimestre, cracha]
+    columns:
+      - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano'. Parte da PK."
+        data_tests: [not_null]
+      - name: inicio_bimestre
+        description: "Data de início do bimestre."
+      - name: fim_bimestre
+        description: "Data de fim do bimestre."
+      - name: gerente_meta
+        description: "Gerente responsável pela meta."
+      - name: cracha
+        description: "Crachá do funcionário do roster. Parte da PK."
+        data_tests: [not_null]
+      - name: nome
+        description: "Nome do funcionário."
+      - name: cargo
+        description: "Cargo do funcionário."
+      - name: grupo_cargo
+        description: "Grupo de cargo (regra de elegibilidade)."
+      - name: meta_qtde
+        description: "Meta de melhorias no bimestre (fixa: 1 por elegível)."
+      - name: elegivel
+        description: "Flag (bit) de elegibilidade."
 
   - name: fct_melhorias_em_andamento
+    description: >
+      Pipeline de melhorias NÃO aprovadas (dt_fap nulo). Fora dos fatos de aprovadas
+      (ADR 0003). Referenciada por created, carrega o status do fluxo.
     columns:
       - name: id
+        description: "ID da linha em mel_aprovacao. PK."
         data_tests: [unique, not_null]
+      - name: numero_fap
+        description: "Número da FAP (pode ser nulo antes da numeração)."
+      - name: tipo_melhoria
+        description: "Tipo da melhoria."
+      - name: status
+        description: "Status atual no fluxo de aprovação."
+      - name: setor
+        description: "Setor da melhoria."
+      - name: gerente_idealizador
+        description: "Gerente do idealizador."
+      - name: cracha_idealizador
+        description: "Crachá do idealizador."
+      - name: nome_idealizador
+        description: "Nome do idealizador."
+      - name: dt_referencia
+        description: "Data de referência (created): entrada no pipeline."
+      - name: dt_inicio_fluxo
+        description: "Data de início do fluxo de aprovação."

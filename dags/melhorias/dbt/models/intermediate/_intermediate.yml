@@ -1,0 +1,80 @@
+version: 2
+
+models:
+  - name: int_ganhos_calc
+    description: >
+      Cálculo de ganhos WIDE (meses 1..4 em colunas). Componentes de hrs_ganhas,
+      g_consumo e troca_mp por mês, seguindo a regra Qlik (Ting% sempre troca MP).
+      O unpivot para long e a conversão R$ acontecem em int_ganhos_long.
+    columns:
+      - name: numero_fap
+        description: "Número da FAP."
+      - name: tipo_melhoria
+        description: "Tipo da melhoria."
+      - name: dt_fap
+        description: "Data da FAP (data mestra, ADR 0003)."
+      - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano'."
+      - name: eh_tempo_ciclo
+        description: "Flag: 1 = ganho por horas (TC/Aglutinação), 0 = consumo/troca MP."
+
+  - name: int_ganhos_long
+    description: >
+      Ganhos LONG: uma linha por (FAP, mês 1..4) com ganho_reais convertido (ADR 0003).
+      Espelha base_melhoria do Qlik. Conversão TC/Aglutinação via carga_horaria + custo;
+      Consumo/Troca MP já em R$; demais tipos usam ganho_previsto no mês 1.
+    columns:
+      - name: numero_fap
+        description: "Número da FAP."
+      - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano'."
+      - name: mes_offset
+        description: "Mês de competência relativo ao dt_fap (1..4)."
+      - name: dt_competencia
+        description: "Data de competência (dt_fap + mes_offset-1 meses)."
+      - name: hrs_ganhas
+        description: "Horas ganhas no mês. Pode ser negativo (piora)."
+      - name: ganho_reais
+        description: "Ganho em R$ no mês, convertido por tipo. Pode ser negativo."
+
+  - name: int_melhorias_realizado
+    description: >
+      Realizado de melhorias por (bimestre, crachá idealizador). Entra no fct_aderencia.
+      qtde_melhorias conta FAPs não-replicação com ganho >= 0; ganho_total soma tudo.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [bimestre, cracha_idealizador]
+    columns:
+      - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano'. Parte da PK composta."
+        data_tests: [not_null]
+      - name: cracha_idealizador
+        description: "Crachá do idealizador. Parte da PK composta."
+        data_tests: [not_null]
+      - name: qtde_melhorias
+        description: "Qtde de melhorias (FAPs distintas não-replicação com ganho >= 0)."
+      - name: ganho_total
+        description: "Soma de todos os ganhos do idealizador no bimestre (R$)."
+
+  - name: int_gerente_remap
+    description: >
+      Aplica remap de gerente (seed mel_gerente_remap, com janela de data) e lookup de
+      área (seed mel_gerente_area). Fall-through: sem match no remap mantém o original.
+    columns:
+      - name: gerente_origem
+        description: "Gerente original vindo da meta."
+      - name: inicio_bimestre
+        description: "Início do bimestre (janela de validade do remap)."
+      - name: gerente_ajustado
+        description: "Gerente após remap (coalesce destino / origem)."
+      - name: area
+        description: "Área do gerente ajustado."
+
+  - name: int_calendario_spine
+    description: >
+      Date spine manual (tally table de dígitos com cross-join). Evita o WITH aninhado
+      do dbt_utils.date_spine que o SQL Server 2008 rejeita. Consumida por dim_calendario.
+    columns:
+      - name: date_day
+        description: "Data diária da spine (2020-01-01 .. getdate()+1ano)."
+        data_tests: [unique, not_null]

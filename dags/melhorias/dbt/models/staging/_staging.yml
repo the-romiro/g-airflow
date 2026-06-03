@@ -1,0 +1,101 @@
+version: 2
+
+models:
+  - name: stg_mel_ganhos
+    description: >
+      Limpeza 1:1 sobre o bronze mel_ganhos. Grão: componente (uma linha por Id /
+      cod_prod da FAP). dt_fap nativo; bimestre canônico via seed mel_bimestre.
+    columns:
+      - name: id
+        description: "PK do componente em mel_ganhos."
+        data_tests: [unique, not_null]
+      - name: numero_fap
+        description: "Número da FAP."
+      - name: tipo_melhoria
+        description: "Tipo da melhoria (TC, Consumo, Troca MP, Aglutinação, etc.)."
+      - name: dt_fap
+        description: "Data da FAP (data mestra, ADR 0003)."
+      - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano' derivado de dt_fap."
+      - name: cracha_idealizador
+        description: "Crachá do idealizador."
+
+  - name: stg_mel_aprovacao
+    description: >
+      Limpeza 1:1 sobre o bronze mel_aprovacao. Deriva dt_fap (data mestra, ADR 0003)
+      e bimestre canônico. Fonte do pipeline de não-aprovadas e atributos de fluxo.
+    columns:
+      - name: id
+        description: "PK da linha em mel_aprovacao."
+        data_tests: [unique, not_null]
+      - name: numero_fap
+        description: "Número da FAP (pode ser nulo antes da numeração)."
+      - name: status
+        description: "Status no fluxo de aprovação."
+      - name: dt_fap
+        description: "Data da FAP derivada (coalesce dt_fap / dt_aprovacao_eng)."
+      - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano' derivado de dt_fap."
+      - name: cracha_idealizador
+        description: "Crachá do idealizador."
+
+  - name: stg_meta_aderencia
+    description: >
+      Limpeza 1:1 sobre mel_meta_aderencia (tabela CENTRAL). Grão (bimestre, codigo).
+      Deriva flag elegivel e bimestre canônico; preserva bimestre_origem.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [bimestre, codigo]
+    columns:
+      - name: bimestre
+        description: "Bimestre canônico 'mes1-mes2/ano'. Parte da PK composta."
+        data_tests: [not_null]
+      - name: bimestre_origem
+        description: "Bimestre original da fonte, antes da canonicalização."
+      - name: codigo
+        description: "Crachá (código RH) do funcionário. Parte da PK composta."
+        data_tests: [not_null]
+      - name: gerente_meta
+        description: "Gerente responsável pela meta."
+      - name: grupo_cargo
+        description: "Grupo de cargo (regra de elegibilidade)."
+      - name: qtde
+        description: "Meta fixa: 1 melhoria por elegível/bimestre."
+      - name: elegivel
+        description: "Flag (bit): grupo_cargo elegível E categoria 'Considera'."
+
+  - name: stg_carga_horaria
+    description: >
+      Limpeza 1:1 sobre mel_carga_horaria (horas trabalhadas mensais por setor).
+      Usada na conversão de horas ganhas para R$ (int_ganhos_long).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [mes, setor]
+    columns:
+      - name: mes
+        description: "Mês de referência. Parte da PK composta."
+        data_tests: [not_null]
+      - name: setor
+        description: "Setor. Parte da PK composta."
+        data_tests: [not_null]
+      - name: ch_mensal
+        description: "Carga horária mensal (horas) do setor."
+
+  - name: stg_custo_funcionario
+    description: >
+      Limpeza 1:1 sobre mel_custo_funcionario (custo mensal por estabelecimento).
+      Usado na conversão de horas ganhas para R$ (int_ganhos_long).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [dt_competencia, estabelecimento]
+    columns:
+      - name: mes_ano
+        description: "Mês/ano textual de referência."
+      - name: dt_competencia
+        description: "Data de competência. Parte da PK composta."
+        data_tests: [not_null]
+      - name: estabelecimento
+        description: "Estabelecimento/filial. Parte da PK composta."
+        data_tests: [not_null]
+      - name: custo
+        description: "Custo do funcionário no mês/estabelecimento (R$)."

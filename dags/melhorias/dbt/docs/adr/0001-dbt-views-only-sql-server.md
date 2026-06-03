@@ -35,7 +35,10 @@ Restrição dura: o banco SQL Server tem apenas **10GB** de espaço total.
 - Storage extra no SQL Server ≈ 0; cabe no orçamento de 10GB.
 - Custo de query empurrado para o refresh do Power BI (import), não para o banco.
 - Se algum model-view ficar lento no refresh, materializar aquele model específico
-  como tabela é uma exceção pontual (não o padrão).
+  como tabela é uma exceção pontual (não o padrão). Threshold medido e gatilho de
+  materialização em [performance-threshold.md](../performance-threshold.md): o
+  gargalo é `int_ganhos_long` (unpivot 4×, recomputado por cada consumidor); começar
+  a agir perto de ~250-300k linhas em `mel_ganhos` (~3× o atual de 102k).
 - DirectQuery não é suportado de forma performática (views sem índice próprio); a
   decisão pressupõe import. Mudar para DirectQuery exigiria reavaliar (tabelas +
   índices vs limite de 10GB).
