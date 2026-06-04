@@ -10,7 +10,12 @@ models:
         description: "PK do componente em mel_ganhos."
         data_tests: [unique, not_null]
       - name: numero_fap
-        description: "Número da FAP."
+        description: >
+          Número da FAP. É um número composto por `id_setor` + `id_tipo_fap`
+          + `year(date)` + `month(date)` + `day(date)` + qtde numero_fap gerados em date + 1.
+          Exemplo: `272102026060401` -> `272-10-2026-06-04-01`.
+          Esse número é único e é gerado pelo app em de melhorias no power apps.
+          `id_setor` e `id_tipo_fap` vem de listas no sharepoint, não mapeamos para SQL Server.
       - name: tipo_melhoria
         description: "Tipo da melhoria (TC, Consumo, Troca MP, Aglutinação, etc.)."
       - name: dt_fap
@@ -29,7 +34,12 @@ models:
         description: "PK da linha em mel_aprovacao."
         data_tests: [unique, not_null]
       - name: numero_fap
-        description: "Número da FAP (pode ser nulo antes da numeração)."
+        description: >
+          Número da FAP. É um número composto por `id_setor` + `id_tipo_fap`
+          + `year(date)` + `month(date)` + `day(date)` + qtde numero_fap gerados em date + 1.
+          Exemplo: `272102026060401` -> `272-10-2026-06-04-01`.
+          Esse número é único e é gerado pelo app em de melhorias no power apps.
+          `id_setor` e `id_tipo_fap` vem de listas no sharepoint, não mapeamos para SQL Server.
       - name: status
         description: "Status no fluxo de aprovação."
       - name: dt_fap

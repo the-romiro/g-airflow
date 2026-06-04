@@ -76,6 +76,7 @@ select
             end
         when tipo_melhoria in ('Consumo', 'Troca de Matéria Prima') or setor like 'Ting%'
             then g_consumo_{{ n }} + troca_mp_{{ n }}
+        -- Só existe ganho_previsto para o primeiro mês (1).
         else case when {{ n }} = 1 then coalesce(ganho_previsto, 0) else 0 end
     end as ganho_reais
 from calc_aux
