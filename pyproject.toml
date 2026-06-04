@@ -58,7 +58,7 @@ force_grid_wrap = 0
 combine_as_imports = true
 
 [tool.pytest.ini_options]
-pythonpath = "."
+pythonpath = [".", "dags"]
 addopts = "-p no:warnings"
 xfail_strict = true
 testpaths = ["tests", "integration"]

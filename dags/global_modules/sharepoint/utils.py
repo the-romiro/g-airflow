@@ -116,8 +116,10 @@ def _parse_bool_series(series: pd.Series) -> pd.Series:
 
 
 def _parse_dt_with(series: pd.Series, tz=False) -> pd.Series:
+    # dayfirst=True evita o swap dd/MM vs MM/dd da inferência do pandas (Power Automate
+    # manda dd/MM/yyyy). Para resolução por-campo com âncora, ver datetime_resolve.py.
     formats = ["%d/%m/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S"]
-    parsed = pd.to_datetime(series, utc=tz, errors="coerce")
+    parsed = pd.to_datetime(series, utc=tz, dayfirst=True, errors="coerce")
     if parsed.isna().any():
         for fmt in formats:
             if tz:
@@ -144,6 +146,12 @@ def parse_by_schema(
 
         if isinstance(col_type, type):
             col_type = col_type()  # noqa: PLW2901
+
+        # Colunas já resolvidas por resolve_datetimes (datetime64) não são reprocessadas.
+        if isinstance(col_type, (sa_types.DateTime, sa_types.Date)) and (
+            pd.api.types.is_datetime64_any_dtype(df[col])
+        ):
+            continue
 
         if isinstance(col_type, sa_types.Boolean):
             df[col] = _parse_bool_series(df[col])

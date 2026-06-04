@@ -11,7 +11,7 @@ from global_modules.ms_teams import notify_teams_on_failure
 from global_modules.sharepoint.sharepoint import fetch_sharepoint_items_with_graph_api
 from global_modules.sharepoint.utils import build_select_with_cast
 from global_modules.utils import read_sql_file
-from melhorias.dags.BRONZE_MELHORIAS_APROVACOES.fields import LIST_FIELDS
+from melhorias.dags.BRONZE_MELHORIAS_APROVACOES.fields import DATETIME_CONFIG, LIST_FIELDS
 
 log = LoggingMixin().log
 
@@ -43,6 +43,7 @@ def extract_sharepoint():
         list_name="Coletar_Assinaturas",
         # Se colocar menos de 90 dias, ajuste o DELETE da query.
         start_date=datetime.now(timezone.utc) - timedelta(days=90),
+        datetime_config=DATETIME_CONFIG,
     )
 
     log.info(f"[INFO] {len(df)} registros extraídos do SharePoint")

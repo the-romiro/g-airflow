@@ -1,3 +1,4 @@
+from global_modules.sharepoint.datetime_resolve import DatetimeConfig
 from sqlalchemy import types as sa_types
 
 LIST_FIELDS: dict[str, sa_types.TypeEngine] = {
@@ -55,7 +56,8 @@ LIST_FIELDS: dict[str, sa_types.TypeEngine] = {
     "cc_idealizador": sa_types.VARCHAR(255),
     "Gerente_x0020_Idealizador": sa_types.VARCHAR(255),
     "Created": sa_types.DateTime(),
-    "Modified": sa_types.DateTime(timezone=True),
+    # Normalizado p/ hora local BR (naive) por resolve_datetimes -> TIMESTAMP, não TIMESTAMPTZ.
+    "Modified": sa_types.DateTime(),
     "_x00c9__x0020_uma_x0020_replica_": sa_types.VARCHAR(255),
     "volume_x0020_foi_x0020_editado": sa_types.Boolean(),
     "Cargo": sa_types.VARCHAR(255),
@@ -65,6 +67,12 @@ LIST_FIELDS: dict[str, sa_types.TypeEngine] = {
     "Editor": sa_types.VARCHAR(255),
 }
 
-DATETIME_WITH_TIMEZONE_FIELDS = [
+# Esta lista só tem Created/Modified (campos de sistema, ISO-UTC -> hora local BR naive).
+# dt_fap deriva de dt_aprovacao_eng (SILVER) e dt_fap_informada_por é tratado pelo
+# parse_by_schema (dayfirst=True), então não precisam de resolução ancorada aqui.
+DATETIME_SYSTEM_FIELDS = [
+    "Created",
     "Modified",
 ]
+
+DATETIME_CONFIG = DatetimeConfig(system_fields=DATETIME_SYSTEM_FIELDS)

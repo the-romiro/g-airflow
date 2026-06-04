@@ -23,10 +23,10 @@ def show_columns(
         sys.exit(1)
 
     client = GraphClient(
-        tenant=getenv("SHAREPOINT_TENANT_ID", ''),
+        tenant=getenv("SHAREPOINT_TENANT_ID", ""),
     ).with_client_secret(
-        getenv("SHAREPOINT_CLIENT_ID", ''),
-        getenv("SHAREPOINT_CLIENT_SECRET", ''),
+        getenv("SHAREPOINT_CLIENT_ID", ""),
+        getenv("SHAREPOINT_CLIENT_SECRET", ""),
     )
 
     print(f"🔍 Buscando colunas em: {list_name}...")

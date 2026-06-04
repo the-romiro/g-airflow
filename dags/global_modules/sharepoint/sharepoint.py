@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 from airflow.utils.log.logging_mixin import LoggingMixin
+from global_modules.sharepoint.datetime_resolve import DatetimeConfig, resolve_with_config
 from global_modules.sharepoint.envs import env
 from global_modules.sharepoint.utils import (
     map_to_json,
@@ -144,12 +145,13 @@ def fetch_sharepoint_items(  # noqa: PLR0913, PLR0917
     return all_items
 
 
-def fetch_sharepoint_items_with_graph_api(
+def fetch_sharepoint_items_with_graph_api(  # noqa: PLR0913, PLR0917
     list_fields: dict[str, sa_types.TypeEngine],
     page_size=1000,
     start_date: datetime | None = None,
     site_url: str | None = None,
     list_name: str | None = None,
+    datetime_config: DatetimeConfig | None = None,
 ):
     """
     Recupera os registros de uma lista do SharePoint via Microsoft Graph API.
@@ -235,6 +237,11 @@ def fetch_sharepoint_items_with_graph_api(
     for col_name in list_fields:
         if col_name not in all_items.columns:
             all_items[col_name] = None  # Cria a coluna vazia se a API a omitiu
+
+    # Resolve datas (dd/MM vs MM/dd + fuso) ANTES do parse_by_schema. Quando há config,
+    # essas colunas já saem como datetime64 e o parse_by_schema não as toca novamente.
+    if datetime_config is not None:
+        all_items = resolve_with_config(all_items, datetime_config)
 
     all_items = parse_by_schema(all_items, list_fields)
 
