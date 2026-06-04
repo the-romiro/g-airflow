@@ -24,8 +24,9 @@ from sqlalchemy.engine import make_url
 
 log = LoggingMixin().log
 
-MEL_APROVACAO_DATASET = Dataset("melhorias://bronze/melhoria_aprovacao")
-MEL_GANHOS_DATASET = Dataset("melhorias://bronze/melhoria_ganhos")
+# Disparado pela SILVER_MELHORIAS_DATA_FAP (emite data_fap), que por sua vez
+# depende dos datasets bronze. Assim o dbt roda só depois do dt_fap atualizado.
+MEL_DATA_FAP_DATASET = Dataset("melhorias://silver/data_fap")
 MEL_GOLD_DATASET = Dataset("melhorias://gold/melhorias")
 
 # melhorias/dags/GOLD_MELHORIAS_DBT/ -> parents[2] = melhorias
@@ -114,7 +115,7 @@ default_args = {
 with DAG(
     dag_id="GOLD_MELHORIAS_DBT",
     default_args=default_args,
-    schedule=[MEL_APROVACAO_DATASET, MEL_GANHOS_DATASET],
+    schedule=[MEL_DATA_FAP_DATASET],
     catchup=False,
     max_active_runs=1,
     tags=["melhorias", "gold", "dbt"],
