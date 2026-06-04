@@ -1,5 +1,5 @@
--- Pipeline: melhorias NÃO aprovadas (dt_fap nulo). ADR 0003: fora dos fatos de
--- aprovadas. Referenciada por created (não dt_fap). Carrega status do fluxo.
+-- Pipeline: melhorias em andamento (status = 'Em andamento'). ADR 0003: fora dos
+-- fatos de aprovadas. Referenciada por created (não dt_fap). Carrega status do fluxo.
 
 select
     id,
@@ -13,4 +13,4 @@ select
     created as dt_referencia,
     dt_inicio_fluxo
 from {{ ref('stg_mel_aprovacao') }}
-where dt_fap is null
+where status = 'Em andamento'
