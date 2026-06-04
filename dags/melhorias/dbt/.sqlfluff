@@ -1,0 +1,15 @@
+[sqlfluff]
+dialect = tsql
+templater = jinja
+max_line_length = 100
+output_line_length = 100
+rules = core
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+
+[sqlfluff:indentation]
+tab_space_size = 4
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
