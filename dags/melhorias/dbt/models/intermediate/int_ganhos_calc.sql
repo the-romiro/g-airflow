@@ -26,14 +26,14 @@ componentes as (
         bimestre,
         replicacao,
         ganho_previsto,
-        -- flag de classe (segue Qlik: Ting% sempre troca MP)
+        -- flag de classe: só Tempo Ciclo e Aglutinação contam como tempo de ciclo
         case
-            when tipo_melhoria in ('Consumo', 'Troca de Matéria Prima') then 0 else 1
+            when tipo_melhoria in ('Tempo Ciclo', 'Aglutinação') then 1 else 0
         end as eh_tempo_ciclo,
         {% for n in range(1, 5) %}
         -- mês {{ n }}
         case
-            when tipo_melhoria not in ('Consumo', 'Troca de Matéria Prima')
+            when tipo_melhoria in ('Tempo Ciclo', 'Aglutinação')
                 then (tc_anterior - tc_atual) * (mix / 100.0) * volume_mes_{{ n }} / 60.0
             else 0
         end as hrs_ganhas_{{ n }},
